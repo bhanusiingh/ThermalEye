@@ -67,7 +67,8 @@ def main():
                     DEFAULT_S2_PATCH_HEIGHT_PX
                 )
                 actual_fp = row.get("image_fingerprint")
-                if pd.isna(actual_fp) or actual_fp != expected_fp:
+                expected_strict_fp = expected_fp + "_STRICT"
+                if pd.isna(actual_fp) or actual_fp not in (expected_fp, expected_strict_fp):
                     # Stale cache or legacy entry without verifiable provenance
                     continue
                     

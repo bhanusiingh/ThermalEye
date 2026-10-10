@@ -39,18 +39,32 @@ def main() -> None:
         default=DEFAULT_MAX_TIME_GAP_HOURS,
         help=f"Maximum time gap in hours between linked detections (default: {DEFAULT_MAX_TIME_GAP_HOURS})",
     )
+    parser.add_argument(
+        "--output-events",
+        type=Path,
+        default=DEFAULT_EVENTS_OUTPUT_PATH,
+        help="Path to save candidate events CSV",
+    )
+    parser.add_argument(
+        "--output-grouped",
+        type=Path,
+        default=DEFAULT_GROUPED_OUTPUT_PATH,
+        help="Path to save individual grouped detections CSV",
+    )
     args = parser.parse_args()
 
     print("Initiating ThermalEye Temporal Event Grouping (Phase 2)...")
     print(f"Input file           : {args.input}")
     print(f"Spatial threshold    : {args.spatial_km} km")
     print(f"Max time gap         : {args.time_gap_hours} hours")
+    print(f"Events Output        : {args.output_events}")
+    print(f"Grouped Detections   : {args.output_grouped}")
 
     try:
         events_df, grouped_df = run_temporal_analysis(
             input_csv_path=args.input,
-            output_events_path=DEFAULT_EVENTS_OUTPUT_PATH,
-            output_grouped_path=DEFAULT_GROUPED_OUTPUT_PATH,
+            output_events_path=args.output_events,
+            output_grouped_path=args.output_grouped,
             spatial_distance_km=args.spatial_km,
             max_time_gap_hours=args.time_gap_hours,
         )
@@ -65,8 +79,8 @@ def main() -> None:
         print(f"Multi-detection Evts : {multi_det_events}")
         print(f"Single-detection Evts: {single_det_events}")
         print(f"Max Detections/Event : {max_detections}")
-        print(f"Events Output        : {DEFAULT_EVENTS_OUTPUT_PATH}")
-        print(f"Grouped Detections   : {DEFAULT_GROUPED_OUTPUT_PATH}")
+        print(f"Events Output        : {args.output_events}")
+        print(f"Grouped Detections   : {args.output_grouped}")
         print("===========================================================")
         print(
             "\nNote: A single-day sample captures intra-day overpasses (NOAA-20 and NOAA-21) "

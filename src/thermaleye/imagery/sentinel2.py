@@ -119,6 +119,7 @@ class S2PatchResult:
             "patch_width_px": self.patch_width_px,
             "patch_height_px": self.patch_height_px,
             "output_path": str(self.output_path) if self.output_path else None,
+            "image_fingerprint": self.image_fingerprint,
             "success": self.success,
             "error_message": self.error_message,
         }

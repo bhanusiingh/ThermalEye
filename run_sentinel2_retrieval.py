@@ -65,6 +65,18 @@ def main() -> None:
         action="store_true",
         help="If set, strictly restrict Sentinel-2 search window to end ON OR BEFORE the event detection time.",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_S2_OUTPUT_DIR,
+        help="Directory to save downloaded patches",
+    )
+    parser.add_argument(
+        "--meta-path",
+        type=Path,
+        default=DEFAULT_S2_META_PATH,
+        help="Path to save metadata CSV log",
+    )
     args = parser.parse_args()
 
     print("Initiating ThermalEye Sentinel-2 Retrieval (Phase 4)...")
@@ -98,7 +110,7 @@ def main() -> None:
         event_id = row["event_id"]
         lat = float(row["centroid_lat"])
         lon = float(row["centroid_lon"])
-        event_date = str(row.get("last_detected", row.get("first_detected", "")))[:10]
+        event_date = str(row.get("last_detected", row.get("first_detected", "")))
 
         print(f"  Querying: {event_id} | lat={lat}, lon={lon} | date={event_date}")
         result = retrieve_sentinel2_patch(
@@ -107,7 +119,7 @@ def main() -> None:
             centroid_lon=lon,
             event_date=event_date,
             client=client,
-            output_dir=DEFAULT_S2_OUTPUT_DIR,
+            output_dir=args.output_dir,
             date_range_days=args.date_range_days,
             max_cloud_pct=args.max_cloud_pct,
             width_px=DEFAULT_S2_PATCH_WIDTH_PX,
@@ -127,16 +139,16 @@ def main() -> None:
 
     # Save metadata
     if results:
-        DEFAULT_S2_META_PATH.parent.mkdir(parents=True, exist_ok=True)
+        args.meta_path.parent.mkdir(parents=True, exist_ok=True)
         new_df = pd.DataFrame([r.to_metadata_dict() for r in results])
-        if DEFAULT_S2_META_PATH.exists():
-            old_df = pd.read_csv(DEFAULT_S2_META_PATH)
+        if args.meta_path.exists():
+            old_df = pd.read_csv(args.meta_path)
             # Remove old entries for the same event IDs to avoid duplicates
             old_df = old_df[~old_df['event_id'].isin(new_df['event_id'])]
             final_df = pd.concat([old_df, new_df], ignore_index=True)
         else:
             final_df = new_df
-        final_df.to_csv(DEFAULT_S2_META_PATH, index=False)
+        final_df.to_csv(args.meta_path, index=False)
 
     successful = sum(1 for r in results if r.success)
     failed = len(results) - successful
@@ -145,8 +157,8 @@ def main() -> None:
     print(f"Events Attempted     : {len(results)}")
     print(f"Successful Patches   : {successful}")
     print(f"Failed / No Data     : {failed}")
-    print(f"Output Directory     : {DEFAULT_S2_OUTPUT_DIR}")
-    print(f"Metadata Log         : {DEFAULT_S2_META_PATH}")
+    print(f"Output Directory     : {args.output_dir}")
+    print(f"Metadata Log         : {args.meta_path}")
     print(f"======================================================")
     if failed > 0:
         print(

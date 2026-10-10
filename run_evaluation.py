@@ -15,56 +15,61 @@ def main():
     args = parser.parse_args()
 
     print("=== ThermalEye Phase 15: Isolated Baseline Evaluation ===")
-    
+
     if not args.golden_csv.exists():
         print(f"Error: Golden dataset not found at {args.golden_csv}")
         return
-        
+
     golden_df = pd.read_csv(args.golden_csv)
-    
+
     # Empty template check
     if golden_df.empty:
         print("\nNotice: The provided golden dataset is empty.")
         print("This is expected if manual curation has not yet occurred.")
         print("Run aborted safely. No production files were modified.")
         return
-        
+
     validate_golden_dataset(golden_df)
-    
+
     if not args.fusion_csv.exists():
         print(f"Error: Fusion output not found at {args.fusion_csv}")
         return
-        
+
     fusion_df = pd.read_csv(args.fusion_csv)
-    
+
     from thermaleye.evaluation.matching import match_incidents
     matched_golden_df = match_incidents(golden_df, fusion_df, args.spatial_tol_km, args.time_tol_hours)
-    
+
     # Audit log of matches
     print(f"\n--- Matching Audit (Tol: {args.spatial_tol_km}km, {args.time_tol_hours}h) ---")
     status_counts = matched_golden_df['match_status'].value_counts()
     for status, count in status_counts.items():
         print(f"  {status}: {count}")
-        
+
     # Explicit exclusions and eligibility
     target_class = "confirmed_industrial_fire"
     total_golden = len(golden_df)
     total_target_count = (golden_df['ground_truth_class'] == target_class).sum()
-    
+
     unmatched = matched_golden_df[matched_golden_df['match_status'] == 'Unmatched']
     ambiguous = matched_golden_df[matched_golden_df['match_status'] == 'Ambiguous']
     conflicts = matched_golden_df[matched_golden_df['match_status'] == 'Conflict']
     inconclusive = matched_golden_df[matched_golden_df['match_status'] == 'Inconclusive']
-    
+
     # Exclude all unverified or conflicting matches from the target denominator
     # Unmatched is excluded because observation adequacy cannot be independently established (might be cloud cover)
     eligible_golden = matched_golden_df[matched_golden_df['match_status'] == 'Matched']
     eligible_target_count = (eligible_golden['ground_truth_class'] == target_class).sum()
-    
+
     # We do not have independent proof of observation adequacy for unmatched incidents (e.g. no cloud cover logs)
     # Therefore, we cannot confidently assert end-to-end recall.
     observation_adequacy_known = False
-    
+
+    # We cannot guarantee that all uncurated detections are true false positives, as the golden dataset might be incomplete.
+    # A known completeness flag can only be established by a domain expert providing documented evidence
+    # that exhaustive verification of the entire bounding box was performed, confirming NO OTHER unrecorded fires exist.
+    ground_truth_completeness_known = False
+
     print(f"\n--- Metrics Denominators ---")
     print(f"  Total Curated Incidents: {total_golden}")
     print(f"  Total Target Class ('{target_class}'): {total_target_count}")
@@ -74,26 +79,38 @@ def main():
     print(f"  Excluded (Incident Conflicts): {len(conflicts)}")
     print(f"  End-to-End Target Class Denominator: {total_target_count}")
     print(f"  Match-Conditional Target Class Denominator: {eligible_target_count}")
-    
+    print(f"  Ground-Truth Completeness Known: {ground_truth_completeness_known}")
+
     valid_matches = matched_golden_df[matched_golden_df['matched_event_id'].notna()]
-    merged = pd.merge(valid_matches, fusion_df, left_on='matched_event_id', right_on='event_id', how='left')
-    
+    # The evaluation candidate pool must encompass all events in fusion_df, not just matches.
+    merged = pd.merge(
+        fusion_df,
+        valid_matches[['matched_event_id', 'ground_truth_class']],
+        left_on='event_id',
+        right_on='matched_event_id',
+        how='left'
+    )
+    # Events not in the curated dataset receive 'uncurated_detection'.
+    # This indicates the event lacks a curated incident match, but does not prove it is a true false positive.
+    merged['ground_truth_class'] = merged['ground_truth_class'].fillna('uncurated_detection')
+
     print(f"\nEligible Matched Samples: {len(merged)}")
     if len(merged) < args.k:
         print(f"Warning: Merged sample size ({len(merged)}) is less than K={args.k}.")
         print("Reporting results as a preliminary smoke test, not a statistically significant performance claim.")
     class_dist = golden_df['ground_truth_class'].value_counts().to_dict()
     print(f"\nClass Distribution: {class_dist}")
-    
+
     results = evaluate_baselines(
-        merged, 
-        conditional_denominator=eligible_target_count, 
+        merged,
+        conditional_denominator=eligible_target_count,
         end_to_end_denominator=total_target_count,
         observation_adequacy_known=observation_adequacy_known,
-        target_class=target_class, 
+        ground_truth_completeness_known=ground_truth_completeness_known,
+        target_class=target_class,
         k=args.k
     )
-    
+
     print("\n--- Baseline Results ---")
     for baseline, metrics in results.items():
         print(f"\n[{baseline}]")
@@ -102,8 +119,8 @@ def main():
                 print(f"  {metric}: {value:.3f}")
             else:
                 print(f"  {metric}: {value}")
-            
+
     print("\nNote: Missing evidence (e.g. S2 CV imagery) was preserved as missing in the fusion output.")
-    
+
 if __name__ == "__main__":
     main()
