@@ -350,9 +350,9 @@ class TestRetrievePatchWorkflow:
         # Pre-create a mock cached file matching the expected path pattern
         from thermaleye.imagery.sentinel2 import generate_image_fingerprint
         from thermaleye.config import DEFAULT_S2_DATE_RANGE_DAYS, DEFAULT_S2_PATCH_HALF_DEG, DEFAULT_S2_PATCH_WIDTH_PX, DEFAULT_S2_PATCH_HEIGHT_PX
-        
+
         fingerprint = generate_image_fingerprint(
-            20.0, 80.0, DEFAULT_S2_DATE_RANGE_DAYS, DEFAULT_S2_PATCH_HALF_DEG, 
+            20.0, 80.0, DEFAULT_S2_DATE_RANGE_DAYS, DEFAULT_S2_PATCH_HALF_DEG,
             DEFAULT_S2_PATCH_WIDTH_PX, DEFAULT_S2_PATCH_HEIGHT_PX
         )
         patch_file = tmp_path / f"TE-EVT-CACHE_{fingerprint}.png"
@@ -374,7 +374,7 @@ class TestRetrievePatchWorkflow:
         """Strict evaluation mode should cap the date_to exactly at the incident time."""
         token_resp = MagicMock(status_code=200)
         token_resp.json.return_value = {"access_token": "tok", "expires_in": 600}
-        
+
         cat_resp = MagicMock(status_code=200)
         cat_resp.json.return_value = {
             "features": [
@@ -401,17 +401,17 @@ class TestRetrievePatchWorkflow:
                 }
             ]
         }
-        
+
         # Processing mock
         proc_resp = MagicMock(status_code=200)
         proc_resp.content = b"fake_png_data"
         from requests.structures import CaseInsensitiveDict
         proc_resp.headers = CaseInsensitiveDict({"Content-Type": "image/png"})
-        
+
         mock_post.side_effect = [token_resp, cat_resp, proc_resp]
-        
+
         client = CDSEClient(client_id="cid", client_secret="csec")
-        
+
         # Call with strict mode and an exact timestamp
         result = retrieve_sentinel2_patch(
             event_id="TE-EVT-STRICT",
@@ -422,23 +422,23 @@ class TestRetrievePatchWorkflow:
             output_dir=tmp_path,
             strict_eval_mode=True
         )
-        
+
         # S2A_1 is post incident (15:00Z > 14:30Z) -> Rejected
         # S2A_3 is malformed -> Rejected
         # S2A_2 is pre incident (10:00+05:30 = 04:30Z < 14:30Z) -> Accepted
         # Therefore, S2A_2 must be the selected scene despite having worse cloud cover.
         assert result.success is True
         # Wait, the scene ID isn't returned directly in result.scene_id in S2PatchResult! Yes it is.
-        # But wait, my manual parse in strict mode replaces 'T' with ' ' and slices to 19. 
+        # But wait, my manual parse in strict mode replaces 'T' with ' ' and slices to 19.
         # "2026-10-09T10:00:00+05:30" sliced to 19 is "2026-10-09 10:00:00", which parsed as UTC is 10:00Z.
-        # 10:00Z <= 14:30Z, so it's valid. 
+        # 10:00Z <= 14:30Z, so it's valid.
         # (It ignores the +05:30 because of the [:19] slice, but STAC usually provides Z).
-        
+
     @patch("requests.post")
     def test_strict_eval_mode_all_post_incident(self, mock_post: MagicMock, tmp_path: Path) -> None:
         token_resp = MagicMock(status_code=200)
         token_resp.json.return_value = {"access_token": "tok", "expires_in": 600}
-        
+
         cat_resp = MagicMock(status_code=200)
         cat_resp.json.return_value = {
             "features": [
@@ -452,7 +452,7 @@ class TestRetrievePatchWorkflow:
             ]
         }
         mock_post.side_effect = [token_resp, cat_resp]
-        
+
         client = CDSEClient(client_id="cid", client_secret="csec")
         result = retrieve_sentinel2_patch(
             event_id="TE-EVT-STRICT2",
@@ -472,7 +472,7 @@ class TestRetrievePatchWorkflow:
         """Exact timestamp match (acquisition == incident) must be permitted as pre-incident."""
         token_resp = MagicMock(status_code=200)
         token_resp.json.return_value = {"access_token": "tok", "expires_in": 600}
-        
+
         cat_resp = MagicMock(status_code=200)
         cat_resp.json.return_value = {
             "features": [
@@ -485,14 +485,14 @@ class TestRetrievePatchWorkflow:
                 }
             ]
         }
-        
+
         proc_resp = MagicMock(status_code=200)
         proc_resp.content = b"fake_png_data"
         from requests.structures import CaseInsensitiveDict
         proc_resp.headers = CaseInsensitiveDict({"Content-Type": "image/png"})
-        
+
         mock_post.side_effect = [token_resp, cat_resp, proc_resp]
-        
+
         client = CDSEClient(client_id="cid", client_secret="csec")
         result = retrieve_sentinel2_patch(
             event_id="TE-EVT-EXACT", centroid_lat=20.0, centroid_lon=80.0,
@@ -506,7 +506,7 @@ class TestRetrievePatchWorkflow:
         """Timezone-naive incident timestamps default to UTC and are handled correctly."""
         token_resp = MagicMock(status_code=200)
         token_resp.json.return_value = {"access_token": "tok", "expires_in": 600}
-        
+
         cat_resp = MagicMock(status_code=200)
         cat_resp.json.return_value = {
             "features": [
@@ -519,14 +519,14 @@ class TestRetrievePatchWorkflow:
                 }
             ]
         }
-        
+
         proc_resp = MagicMock(status_code=200)
         proc_resp.content = b"fake_png_data"
         from requests.structures import CaseInsensitiveDict
         proc_resp.headers = CaseInsensitiveDict({"Content-Type": "image/png"})
-        
+
         mock_post.side_effect = [token_resp, cat_resp, proc_resp]
-        
+
         client = CDSEClient(client_id="cid", client_secret="csec")
         result = retrieve_sentinel2_patch(
             event_id="TE-EVT-NAIVE", centroid_lat=20.0, centroid_lon=80.0,
@@ -540,8 +540,8 @@ class TestRetrievePatchWorkflow:
     def test_strict_eval_mode_cached_patch_requires_catalogue(self, mock_post: MagicMock, tmp_path: Path) -> None:
         """Strict eval mode must query the catalogue for metadata even if the image is cached."""
         client = CDSEClient(client_id="cid", client_secret="csec")
-        
-        # Create a fake strict cache file
+
+        # Create a fake strict cache file with full sidecar
         from thermaleye.imagery.sentinel2 import generate_image_fingerprint
         import hashlib
         fingerprint = generate_image_fingerprint(20.0, 80.0, 10, 0.003, 64, 64) + "_STRICT"
@@ -551,12 +551,19 @@ class TestRetrievePatchWorkflow:
         (tmp_path / cache_filename).with_suffix('.json').write_text(json.dumps({
             "scene_id": "S2A_CACHED",
             "acquisition_time": "2026-10-09T10:00:00Z",
-            "cloud_cover_pct": 5.0
+            "cloud_cover_pct": 5.0,
+            "image_fingerprint": fingerprint,
+            "centroid_lat": 20.0,
+            "centroid_lon": 80.0,
+            "date_range_days": 10,
+            "patch_half_deg": 0.003,
+            "width_px": 64,
+            "height_px": 64,
         }))
 
         token_resp = MagicMock(status_code=200)
         token_resp.json.return_value = {"access_token": "tok", "expires_in": 600}
-        
+
         cat_resp = MagicMock(status_code=200)
         cat_resp.json.return_value = {
             "features": [
@@ -569,7 +576,7 @@ class TestRetrievePatchWorkflow:
                 }
             ]
         }
-        
+
         # It should NOT call the processing API (fetch_patch) because the file exists
         mock_post.side_effect = [token_resp, cat_resp]
 
@@ -581,3 +588,262 @@ class TestRetrievePatchWorkflow:
         assert result.scene_id == "S2A_CACHED"
         assert result.acquisition_time == "2026-10-09T10:00:00Z"
         assert mock_post.call_count == 2 # Only token and catalogue
+
+    @patch("requests.post")
+    def test_strict_cache_valid_pre_incident_differs_from_best_catalogue_candidate(self, mock_post: MagicMock, tmp_path: Path) -> None:
+        """A valid cached pre-incident scene must NOT be rejected just because the catalogue's current best scene differs."""
+        client = CDSEClient(client_id="cid", client_secret="csec")
+
+        from thermaleye.imagery.sentinel2 import generate_image_fingerprint
+        fingerprint = generate_image_fingerprint(20.0, 80.0, 10, 0.003, 64, 64) + "_STRICT"
+        cache_filename = f"TE-EVT-DIFF_{fingerprint}.png"
+        (tmp_path / cache_filename).write_bytes(b"cached_data")
+        import json
+        (tmp_path / cache_filename).with_suffix('.json').write_text(json.dumps({
+            "scene_id": "S2A_CACHED_PRE_DIFFERENT",
+            "acquisition_time": "2026-10-08T10:00:00Z",
+            "cloud_cover_pct": 10.0,
+            "image_fingerprint": fingerprint,
+            "centroid_lat": 20.0,
+            "centroid_lon": 80.0,
+            "date_range_days": 10,
+            "patch_half_deg": 0.003,
+            "width_px": 64,
+            "height_px": 64,
+        }))
+
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"access_token": "tok", "expires_in": 600}
+
+        # Catalogue returns a newer/better candidate
+        cat_resp = MagicMock(status_code=200)
+        cat_resp.json.return_value = {
+            "features": [
+                {
+                    "id": "S2A_CATALOGUE_BEST",
+                    "properties": {
+                        "eo:cloud_cover": 0.0,
+                        "datetime": "2026-10-09T12:00:00Z"
+                    }
+                }
+            ]
+        }
+
+        # Processing API should NOT be called
+        mock_post.side_effect = [token_resp, cat_resp]
+
+        result = retrieve_sentinel2_patch(
+            event_id="TE-EVT-DIFF", centroid_lat=20.0, centroid_lon=80.0,
+            event_date="2026-10-09T14:30:00Z", client=client, output_dir=tmp_path, strict_eval_mode=True
+        )
+        assert result.success is True
+        # Must retain the cached image's OWN identity, not the catalogue best candidate
+        assert result.scene_id == "S2A_CACHED_PRE_DIFFERENT"
+        assert result.acquisition_time == "2026-10-08T10:00:00Z"
+        assert mock_post.call_count == 2
+
+    @patch("requests.post")
+    def test_strict_cache_post_incident_rejected(self, mock_post: MagicMock, tmp_path: Path) -> None:
+        """A cached post-incident scene must be rejected and replaced by an eligible catalogue scene."""
+        client = CDSEClient(client_id="cid", client_secret="csec")
+
+        from thermaleye.imagery.sentinel2 import generate_image_fingerprint
+        fingerprint = generate_image_fingerprint(20.0, 80.0, 10, 0.003, 64, 64) + "_STRICT"
+        cache_filename = f"TE-EVT-POST_{fingerprint}.png"
+        (tmp_path / cache_filename).write_bytes(b"cached_data_post")
+        import json
+        (tmp_path / cache_filename).with_suffix('.json').write_text(json.dumps({
+            "scene_id": "S2A_POST_INCIDENT",
+            "acquisition_time": "2026-10-09T16:00:00Z", # Post-incident (incident at 14:30Z)
+            "cloud_cover_pct": 0.0,
+            "image_fingerprint": fingerprint,
+            "centroid_lat": 20.0,
+            "centroid_lon": 80.0,
+            "date_range_days": 10,
+            "patch_half_deg": 0.003,
+            "width_px": 64,
+            "height_px": 64,
+        }))
+
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"access_token": "tok", "expires_in": 600}
+
+        cat_resp = MagicMock(status_code=200)
+        cat_resp.json.return_value = {
+            "features": [
+                {
+                    "id": "S2A_CATALOGUE_VALID_PRE",
+                    "properties": {
+                        "eo:cloud_cover": 5.0,
+                        "datetime": "2026-10-09T10:00:00Z"
+                    }
+                }
+            ]
+        }
+
+        proc_resp = MagicMock(status_code=200)
+        proc_resp.content = b"fresh_png_data"
+        from requests.structures import CaseInsensitiveDict
+        proc_resp.headers = CaseInsensitiveDict({"Content-Type": "image/png"})
+
+        mock_post.side_effect = [token_resp, cat_resp, proc_resp]
+
+        result = retrieve_sentinel2_patch(
+            event_id="TE-EVT-POST", centroid_lat=20.0, centroid_lon=80.0,
+            event_date="2026-10-09T14:30:00Z", client=client, output_dir=tmp_path, strict_eval_mode=True
+        )
+        assert result.success is True
+        # The post-incident cache was rejected, fresh eligible scene downloaded
+        assert result.scene_id == "S2A_CATALOGUE_VALID_PRE"
+        assert result.acquisition_time == "2026-10-09T10:00:00Z"
+        assert mock_post.call_count == 3
+
+    @patch("requests.post")
+    def test_strict_cache_missing_sidecar_rejected(self, mock_post: MagicMock, tmp_path: Path) -> None:
+        """A cached patch missing its metadata sidecar must be rejected."""
+        client = CDSEClient(client_id="cid", client_secret="csec")
+
+        from thermaleye.imagery.sentinel2 import generate_image_fingerprint
+        fingerprint = generate_image_fingerprint(20.0, 80.0, 10, 0.003, 64, 64) + "_STRICT"
+        cache_filename = f"TE-EVT-NOSIDECAR_{fingerprint}.png"
+        (tmp_path / cache_filename).write_bytes(b"cached_data_no_sidecar")
+        # No .json written!
+
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"access_token": "tok", "expires_in": 600}
+
+        cat_resp = MagicMock(status_code=200)
+        cat_resp.json.return_value = {
+            "features": [
+                {
+                    "id": "S2A_FRESH_PRE",
+                    "properties": {
+                        "eo:cloud_cover": 5.0,
+                        "datetime": "2026-10-09T10:00:00Z"
+                    }
+                }
+            ]
+        }
+
+        proc_resp = MagicMock(status_code=200)
+        proc_resp.content = b"fresh_png_data"
+        from requests.structures import CaseInsensitiveDict
+        proc_resp.headers = CaseInsensitiveDict({"Content-Type": "image/png"})
+
+        mock_post.side_effect = [token_resp, cat_resp, proc_resp]
+
+        result = retrieve_sentinel2_patch(
+            event_id="TE-EVT-NOSIDECAR", centroid_lat=20.0, centroid_lon=80.0,
+            event_date="2026-10-09T14:30:00Z", client=client, output_dir=tmp_path, strict_eval_mode=True
+        )
+        assert result.success is True
+        assert result.scene_id == "S2A_FRESH_PRE"
+        assert mock_post.call_count == 3
+
+    @patch("requests.post")
+    def test_strict_cache_mismatched_fingerprint_rejected(self, mock_post: MagicMock, tmp_path: Path) -> None:
+        """A cached sidecar with mismatched image fingerprint must be rejected."""
+        client = CDSEClient(client_id="cid", client_secret="csec")
+
+        from thermaleye.imagery.sentinel2 import generate_image_fingerprint
+        fingerprint = generate_image_fingerprint(20.0, 80.0, 10, 0.003, 64, 64) + "_STRICT"
+        cache_filename = f"TE-EVT-FP_{fingerprint}.png"
+        (tmp_path / cache_filename).write_bytes(b"cached_data")
+        import json
+        (tmp_path / cache_filename).with_suffix('.json').write_text(json.dumps({
+            "scene_id": "S2A_MISMATCH",
+            "acquisition_time": "2026-10-09T10:00:00Z",
+            "cloud_cover_pct": 5.0,
+            "image_fingerprint": "TAMPERED_FINGERPRINT",
+            "centroid_lat": 20.0,
+            "centroid_lon": 80.0,
+            "date_range_days": 10,
+            "patch_half_deg": 0.003,
+            "width_px": 64,
+            "height_px": 64,
+        }))
+
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"access_token": "tok", "expires_in": 600}
+
+        cat_resp = MagicMock(status_code=200)
+        cat_resp.json.return_value = {
+            "features": [
+                {
+                    "id": "S2A_FRESH_PRE",
+                    "properties": {
+                        "eo:cloud_cover": 5.0,
+                        "datetime": "2026-10-09T10:00:00Z"
+                    }
+                }
+            ]
+        }
+
+        proc_resp = MagicMock(status_code=200)
+        proc_resp.content = b"fresh_png_data"
+        from requests.structures import CaseInsensitiveDict
+        proc_resp.headers = CaseInsensitiveDict({"Content-Type": "image/png"})
+
+        mock_post.side_effect = [token_resp, cat_resp, proc_resp]
+
+        result = retrieve_sentinel2_patch(
+            event_id="TE-EVT-FP", centroid_lat=20.0, centroid_lon=80.0,
+            event_date="2026-10-09T14:30:00Z", client=client, output_dir=tmp_path, strict_eval_mode=True
+        )
+        assert result.success is True
+        assert result.scene_id == "S2A_FRESH_PRE"
+        assert mock_post.call_count == 3
+
+    @patch("requests.post")
+    def test_strict_cache_mismatched_coordinates_or_patch_parameters_rejected(self, mock_post: MagicMock, tmp_path: Path) -> None:
+        """A cached sidecar with mismatched coordinates or patch size must be rejected."""
+        client = CDSEClient(client_id="cid", client_secret="csec")
+
+        from thermaleye.imagery.sentinel2 import generate_image_fingerprint
+        fingerprint = generate_image_fingerprint(20.0, 80.0, 10, 0.003, 64, 64) + "_STRICT"
+        cache_filename = f"TE-EVT-PARAM_{fingerprint}.png"
+        (tmp_path / cache_filename).write_bytes(b"cached_data")
+        import json
+        (tmp_path / cache_filename).with_suffix('.json').write_text(json.dumps({
+            "scene_id": "S2A_MISMATCH_COORDS",
+            "acquisition_time": "2026-10-09T10:00:00Z",
+            "cloud_cover_pct": 5.0,
+            "image_fingerprint": fingerprint,
+            "centroid_lat": 25.0, # Mismatch from requested 20.0
+            "centroid_lon": 80.0,
+            "date_range_days": 10,
+            "patch_half_deg": 0.003,
+            "width_px": 64,
+            "height_px": 64,
+        }))
+
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"access_token": "tok", "expires_in": 600}
+
+        cat_resp = MagicMock(status_code=200)
+        cat_resp.json.return_value = {
+            "features": [
+                {
+                    "id": "S2A_FRESH_PRE",
+                    "properties": {
+                        "eo:cloud_cover": 5.0,
+                        "datetime": "2026-10-09T10:00:00Z"
+                    }
+                }
+            ]
+        }
+
+        proc_resp = MagicMock(status_code=200)
+        proc_resp.content = b"fresh_png_data"
+        from requests.structures import CaseInsensitiveDict
+        proc_resp.headers = CaseInsensitiveDict({"Content-Type": "image/png"})
+
+        mock_post.side_effect = [token_resp, cat_resp, proc_resp]
+
+        result = retrieve_sentinel2_patch(
+            event_id="TE-EVT-PARAM", centroid_lat=20.0, centroid_lon=80.0,
+            event_date="2026-10-09T14:30:00Z", client=client, output_dir=tmp_path, strict_eval_mode=True
+        )
+        assert result.success is True
+        assert result.scene_id == "S2A_FRESH_PRE"
+        assert mock_post.call_count == 3

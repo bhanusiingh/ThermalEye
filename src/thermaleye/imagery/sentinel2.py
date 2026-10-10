@@ -457,6 +457,78 @@ def generate_image_fingerprint(centroid_lat: float, centroid_lon: float, date_ra
     # Generate SHA-256 fingerprint
     return hashlib.sha256(identity.encode('utf-8')).hexdigest()
 
+def validate_strict_cache_metadata(
+    metadata_path: Path,
+    requested_fingerprint: str,
+    centroid_lat: float,
+    centroid_lon: float,
+    date_range_days: int,
+    patch_half_deg: float,
+    width_px: int,
+    height_px: int,
+    ev_dt: datetime,
+) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
+    """Validate a cached Sentinel-2 patch against its own sidecar metadata in strict mode.
+
+    Returns:
+        (is_valid, metadata_dict_or_None, rejection_reason_or_None)
+    """
+    if not metadata_path.exists():
+        return False, None, f"Missing metadata sidecar: {metadata_path.name}"
+
+    try:
+        meta = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return False, None, f"Malformed metadata JSON in {metadata_path.name}: {e}"
+
+    if not isinstance(meta, dict):
+        return False, None, f"Metadata sidecar {metadata_path.name} is not a JSON object"
+
+    # 1. Fingerprint verification
+    cached_fp = meta.get("image_fingerprint")
+    if cached_fp != requested_fingerprint:
+        return False, None, f"Fingerprint mismatch: cached={cached_fp!r} != requested={requested_fingerprint!r}"
+
+    # 2. Coordinates verification (4 decimal places tolerance)
+    cached_lat = meta.get("centroid_lat")
+    cached_lon = meta.get("centroid_lon")
+    if cached_lat is None or cached_lon is None:
+        return False, None, "Missing centroid coordinates in metadata sidecar"
+    try:
+        if abs(float(cached_lat) - centroid_lat) > 1e-4 or abs(float(cached_lon) - centroid_lon) > 1e-4:
+            return False, None, f"Coordinate mismatch: ({cached_lat}, {cached_lon}) != ({centroid_lat}, {centroid_lon})"
+    except (ValueError, TypeError):
+        return False, None, "Invalid centroid coordinate types in metadata sidecar"
+
+    # 3. Patch parameters verification
+    if meta.get("date_range_days") != date_range_days:
+        return False, None, f"date_range_days mismatch: cached={meta.get('date_range_days')} != requested={date_range_days}"
+    if meta.get("patch_half_deg") != patch_half_deg:
+        return False, None, f"patch_half_deg mismatch: cached={meta.get('patch_half_deg')} != requested={patch_half_deg}"
+    if meta.get("width_px") != width_px or meta.get("height_px") != height_px:
+        return False, None, f"Dimension mismatch: cached=({meta.get('width_px')}, {meta.get('height_px')}) != requested=({width_px}, {height_px})"
+
+    # 4. Scene identity
+    cached_scene_id = meta.get("scene_id")
+    if not cached_scene_id or not isinstance(cached_scene_id, str):
+        return False, None, "Missing or invalid scene_id in metadata sidecar"
+
+    # 5. Acquisition timestamp and temporal eligibility
+    cached_acq = meta.get("acquisition_time")
+    if not cached_acq or not isinstance(cached_acq, str):
+        return False, None, "Missing acquisition_time in metadata sidecar"
+    try:
+        cached_dt = datetime.fromisoformat(cached_acq.replace("Z", "+00:00"))
+        if cached_dt.tzinfo is None:
+            cached_dt = cached_dt.replace(tzinfo=timezone.utc)
+    except ValueError as e:
+        return False, None, f"Invalid acquisition_time format {cached_acq!r}: {e}"
+
+    if cached_dt > ev_dt:
+        return False, None, f"Temporal leakage: cached scene {cached_scene_id} is post-incident ({cached_dt} > {ev_dt})"
+
+    return True, meta, None
+
 def retrieve_sentinel2_patch(
     event_id: str,
     centroid_lat: float,
@@ -595,26 +667,34 @@ def retrieve_sentinel2_patch(
 
     if strict_eval_mode and patch_path.exists():
         metadata_path = patch_path.with_suffix('.json')
-        if not metadata_path.exists():
-            logger.warning("Strict cache rejected: Missing metadata sidecar for %s", patch_path)
+        is_valid, meta, reason = validate_strict_cache_metadata(
+            metadata_path=metadata_path,
+            requested_fingerprint=fingerprint,
+            centroid_lat=centroid_lat,
+            centroid_lon=centroid_lon,
+            date_range_days=date_range_days,
+            patch_half_deg=patch_half_deg,
+            width_px=width_px,
+            height_px=height_px,
+            ev_dt=ev_dt,
+        )
+        if is_valid and meta is not None:
+            logger.info("Using cached patch after strict validation for %s: %s (scene_id=%s)", event_id, patch_path, meta["scene_id"])
+            return S2PatchResult(
+                event_id=event_id,
+                scene_id=meta["scene_id"],
+                acquisition_time=meta["acquisition_time"],
+                cloud_cover_pct=meta.get("cloud_cover_pct"),
+                patch_width_px=width_px,
+                patch_height_px=height_px,
+                output_path=patch_path,
+                success=True,
+                image_fingerprint=fingerprint,
+                source_lat=centroid_lat,
+                source_lon=centroid_lon,
+            )
         else:
-            try:
-                import json
-                meta = json.loads(metadata_path.read_text())
-                if meta.get("scene_id") != scene.scene_id:
-                    logger.warning("Strict cache rejected: Scene mismatch (%s != %s)", meta.get("scene_id"), scene.scene_id)
-                elif meta.get("acquisition_time") != scene.acquisition_time:
-                    logger.warning("Strict cache rejected: Acquisition time mismatch")
-                else:
-                    logger.info("Using cached patch after strict validation for %s: %s", event_id, patch_path)
-                    return S2PatchResult(
-                        event_id=event_id, scene_id=scene.scene_id, acquisition_time=scene.acquisition_time,
-                        cloud_cover_pct=scene.cloud_cover_pct, patch_width_px=width_px, patch_height_px=height_px,
-                        output_path=patch_path, success=True,
-                        image_fingerprint=fingerprint, source_lat=centroid_lat, source_lon=centroid_lon
-                    )
-            except Exception as e:
-                logger.warning("Strict cache rejected: Invalid metadata for %s: %s", patch_path, e)
+            logger.warning("Strict cache rejected for %s (%s): %s", event_id, patch_path, reason)
 
     # Processing API request
     proc_ok, image_bytes = client.fetch_patch(
@@ -648,7 +728,14 @@ def retrieve_sentinel2_patch(
     metadata_path.write_text(json.dumps({
         "scene_id": scene.scene_id,
         "acquisition_time": scene.acquisition_time,
-        "cloud_cover_pct": scene.cloud_cover_pct
+        "cloud_cover_pct": scene.cloud_cover_pct,
+        "image_fingerprint": fingerprint,
+        "centroid_lat": centroid_lat,
+        "centroid_lon": centroid_lon,
+        "date_range_days": date_range_days,
+        "patch_half_deg": patch_half_deg,
+        "width_px": width_px,
+        "height_px": height_px,
     }))
 
     return S2PatchResult(

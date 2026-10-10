@@ -65,8 +65,7 @@ def main():
     # Therefore, we cannot confidently assert end-to-end recall.
     observation_adequacy_known = False
     
-    print(f"
---- Metrics Denominators ---")
+    print(f"\n--- Metrics Denominators ---")
     print(f"  Total Curated Incidents: {total_golden}")
     print(f"  Total Target Class ('{target_class}'): {total_target_count}")
     print(f"  Excluded (Unverified/Unmatched): {len(unmatched)}")
@@ -84,8 +83,7 @@ def main():
         print(f"Warning: Merged sample size ({len(merged)}) is less than K={args.k}.")
         print("Reporting results as a preliminary smoke test, not a statistically significant performance claim.")
     class_dist = golden_df['ground_truth_class'].value_counts().to_dict()
-    print(f"
-Class Distribution: {class_dist}")
+    print(f"\nClass Distribution: {class_dist}")
     
     results = evaluate_baselines(
         merged, 
@@ -96,8 +94,7 @@ Class Distribution: {class_dist}")
         k=args.k
     )
     
-    print("
---- Baseline Results ---")
+    print("\n--- Baseline Results ---")
     for baseline, metrics in results.items():
         print(f"\n[{baseline}]")
         for metric, value in metrics.items():

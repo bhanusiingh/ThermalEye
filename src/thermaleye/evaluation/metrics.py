@@ -5,10 +5,8 @@ import numpy as np
 
 def calculate_precision_at_k(df: pd.DataFrame, target_class: str, k: int) -> Union[float, str]:
     """Calculate Precision@K for a ranked dataframe."""
-    if k <= 0:
+    if k <= 0 or df.empty:
         return "N/A"
-    if df.empty:
-        return 0.0
     top_k = df.head(k)
     true_positives = (top_k['ground_truth_class'] == target_class).sum()
     return float(true_positives) / k
@@ -17,6 +15,8 @@ def calculate_recall_at_threshold(df: pd.DataFrame, target_class: str, priority_
     """Calculate Recall for events matching the given priority thresholds."""
     if total_true == 0:
         return "N/A"
+    if df.empty:
+        return 0.0
     
     retrieved = df[df['priority'].isin(priority_thresholds)]
     retrieved_true = (retrieved['ground_truth_class'] == target_class).sum()
