@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thermaleye"
+version = "0.1.0"
+description = "India-focused thermal anomaly detection and analysis system"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31.0",
+    "pandas>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore:urllib3.*:UserWarning",
+    "ignore:.*chardet.*:UserWarning",
+    "ignore:.*charset_normalizer.*:UserWarning",
+    "ignore::Warning:requests",
+]
