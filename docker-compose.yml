@@ -1,0 +1,91 @@
+# ===========================================================================
+# ThermalEye — Production Orchestration Stack
+# ===========================================================================
+
+services:
+  # -------------------------------------------------------------------------
+  # 1. PostGIS Database Engine
+  # -------------------------------------------------------------------------
+  db:
+    image: postgis/postgis:15-3.4
+    container_name: thermaleye_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: thermaleye
+      POSTGRES_PASSWORD: thermaleye_secret
+      POSTGRES_DB: thermaleye
+    ports:
+      - "5432:5432"
+    volumes:
+      - thermaleye_pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U thermaleye -d thermaleye"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # -------------------------------------------------------------------------
+  # 2. FastAPI Geospatial Intelligence Backend
+  # -------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: thermaleye_api
+    restart: unless-stopped
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./static:/app/static
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://thermaleye:thermaleye_secret@db:5432/thermaleye
+      API_HOST: "0.0.0.0"
+      API_PORT: "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------------
+  # 3. Continuous Pipeline Orchestrator Daemon Worker
+  # -------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: thermaleye_worker
+    restart: unless-stopped
+    command: ["python", "run_pipeline.py", "--daemon", "--interval", "3600"]
+    volumes:
+      - ./static:/app/static
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://thermaleye:thermaleye_secret@db:5432/thermaleye
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------------
+  # 4. Nginx Reverse Proxy & React Production Web Client
+  # -------------------------------------------------------------------------
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: thermaleye_web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+volumes:
+  thermaleye_pgdata:
+    name: thermaleye_pgdata

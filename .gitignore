@@ -1,11 +1,22 @@
-# Environment variables and credentials
+# ===========================================================================
+# ThermalEye — Official .gitignore
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# 1. Environment Variables & Secrets (CRITICAL)
+# ---------------------------------------------------------------------------
 .env
 .env.*
 !.env.example
-*.key
 *.pem
+*.key
+*.cert
+*.crt
+secrets.json
 
-# Python
+# ---------------------------------------------------------------------------
+# 2. Python & Bytecode Artifacts
+# ---------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
@@ -27,8 +38,11 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual Environments
+# ---------------------------------------------------------------------------
+# 3. Virtual Environments
+# ---------------------------------------------------------------------------
 venv/
 .venv/
 env/
@@ -36,22 +50,90 @@ ENV/
 env.bak/
 venv.bak/
 
-# Testing & Coverage
+# ---------------------------------------------------------------------------
+# 4. Testing & Code Quality
+# ---------------------------------------------------------------------------
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 .tox/
 .nox/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
 
-# Data and Artifacts
-data/
-!data/.gitkeep
-!data/samples/.gitkeep
+# ---------------------------------------------------------------------------
+# 5. Node / Frontend / Vite Artifacts
+# ---------------------------------------------------------------------------
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# IDEs and OS
-.vscode/
+# ---------------------------------------------------------------------------
+# 6. Satellite Imagery Raster Chips & Cache
+#    (Keep static/imagery/ directory via .gitkeep, ignore generated raster tiles)
+# ---------------------------------------------------------------------------
+static/imagery/*.png
+static/imagery/*.jpg
+static/imagery/*.jpeg
+static/imagery/*.tif
+static/imagery/*.tiff
+static/imagery/*.jp2
+!static/imagery/.gitkeep
+
+# ---------------------------------------------------------------------------
+# 7. Database & Local Storage Files
+# ---------------------------------------------------------------------------
+*.sqlite3
+*.db
+pgdata/
+thermaleye_pgdata/
+
+# ---------------------------------------------------------------------------
+# 8. Temporary, Scratch & Log Files
+# ---------------------------------------------------------------------------
+*.log
+scratch/
+scratch_*.py
+temp/
+tmp/
+*.tmp
+
+# ---------------------------------------------------------------------------
+# 9. Operating System Artifacts
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# 10. IDE & Editor Artifacts
+# ---------------------------------------------------------------------------
 .idea/
+.vscode/
 *.swp
 *.swo
-.DS_Store
-Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# ---------------------------------------------------------------------------
+# 11. AI Agents & Local Assistants
+# ---------------------------------------------------------------------------
+.agents/
+.gemini/
+.claude/
+.cursor/
