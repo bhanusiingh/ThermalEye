@@ -10,6 +10,10 @@ Verifies:
   - GET /api/events/recent
 """
 
+import io
+import json
+import os
+import tempfile
 import unittest
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
@@ -17,6 +21,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from PIL import Image
 
 import main
 
@@ -24,20 +29,35 @@ import main
 class _FakeConn:
     """Minimal asyncpg connection mock dispatching on query order or SQL substring."""
 
-    def __init__(self, *, fetchrow_results=None, fetch_results=None, raise_error=None):
+    def __init__(self, *, fetchrow_results=None, fetch_results=None, fetchval_results=None, raise_error=None):
         self._fetchrow_iter = iter(fetchrow_results or [])
         self._fetch_iter = iter(fetch_results or [])
+        self._fetchval_iter = iter(fetchval_results or [])
         self._raise_error = raise_error
 
     async def fetchrow(self, query, *args):
         if self._raise_error is not None:
             raise self._raise_error
-        return next(self._fetchrow_iter)
+        try:
+            return next(self._fetchrow_iter)
+        except StopIteration:
+            return None
 
     async def fetch(self, query, *args):
         if self._raise_error is not None:
             raise self._raise_error
-        return next(self._fetch_iter)
+        try:
+            return next(self._fetch_iter)
+        except StopIteration:
+            return []
+
+    async def fetchval(self, query, *args):
+        if self._raise_error is not None:
+            raise self._raise_error
+        try:
+            return next(self._fetchval_iter)
+        except StopIteration:
+            return None
 
 
 class _FakePool:
@@ -537,6 +557,314 @@ class TestAnalyticsEndpoints(unittest.TestCase):
                 "evidence": "unavailable",
             },
         )
+
+    # ------------------------------------------------------------------
+    # 6. GET /api/ml/metrics
+    # ------------------------------------------------------------------
+    def test_get_ml_metrics_populated(self):
+        """Verify /api/ml/metrics reads real artifact files when present."""
+        resp = self.client.get("/api/ml/metrics")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+
+        self.assertIn("dataset_stats", data)
+        self.assertIn("model_comparison", data)
+        self.assertIn("evaluation_report", data)
+        self.assertIn("experimental_validation", data)
+
+        # In this workspace, artifacts/ has real generated benchmark artifacts
+        if os.path.exists(os.path.join(main.ARTIFACTS_DIR, "dataset_stats.json")):
+            self.assertIsNotNone(data["dataset_stats"])
+            self.assertIn("total_samples", data["dataset_stats"])
+            self.assertIn("domain_classes", data["dataset_stats"])
+            self.assertIn("class_counts", data["dataset_stats"])
+
+        if os.path.exists(os.path.join(main.ARTIFACTS_DIR, "model_comparison.json")):
+            self.assertIsNotNone(data["model_comparison"])
+            self.assertIn("configurations", data["model_comparison"])
+            self.assertIn("benchmark_summary", data["model_comparison"])
+
+    def test_get_ml_metrics_missing_files(self):
+        """Verify /api/ml/metrics returns null for missing artifacts without fabricating or failing."""
+        with tempfile.TemporaryDirectory() as empty_dir:
+            with patch.object(main, "ARTIFACTS_DIR", empty_dir):
+                resp = self.client.get("/api/ml/metrics")
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(
+            data,
+            {
+                "dataset_stats": None,
+                "model_comparison": None,
+                "evaluation_report": None,
+                "experimental_validation": None,
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # 7. ML & Grad-CAM properties on /api/events and /api/events/{event_id}
+    # ------------------------------------------------------------------
+    def test_events_endpoint_includes_gradcam_and_ml_attributes(self):
+        """Verify GET /api/events exposes gradcam_url, land_cover_confidence, and ml_model_arch."""
+        event_id = uuid4()
+        conn = _FakeConn(
+            fetch_results=[
+                [
+                    {
+                        "id": event_id,
+                        "geojson": json.dumps({"type": "Point", "coordinates": [75.85, 30.90]}),
+                        "footprint_geojson": None,
+                        "first_seen": datetime(2026, 11, 15, 10, 0, tzinfo=timezone.utc),
+                        "last_seen": datetime(2026, 11, 15, 11, 0, tzinfo=timezone.utc),
+                        "max_frp": 85.5,
+                        "priority_score": 75.0,
+                        "priority_reasons_raw": json.dumps({"base": 40, "frp": 35}),
+                        "nearest_osm_type": "industrial",
+                        "nearest_osm_name": "Steel Rolling Mill",
+                        "nearest_osm_distance_km": 0.45,
+                        "land_cover_class": "industrial_thermal",
+                        "land_cover_confidence": 0.942,
+                        "ml_model_arch": "efficientnet_b0",
+                        "ml_disclaimer": "Experimental model classification",
+                        "imagery_rgb_path": "static/imagery/test_rgb.png",
+                        "imagery_swir_path": "static/imagery/test_swir.png",
+                        "gradcam_path": "static/imagery/test_gradcam.png",
+                        "sentinel2_scene_id": "S2A_MSIL2A_TEST",
+                        "imagery_fetched_at": datetime(2026, 11, 15, 12, 0, tzinfo=timezone.utc),
+                        "detection_count": 5,
+                        "created_at": datetime(2026, 11, 15, 10, 0, tzinfo=timezone.utc),
+                        "updated_at": datetime(2026, 11, 15, 12, 0, tzinfo=timezone.utc),
+                    }
+                ]
+            ]
+        )
+
+        with patch.object(main, "pool", _FakePool(conn)):
+            resp = self.client.get("/api/events")
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["type"], "FeatureCollection")
+        self.assertEqual(len(data["features"]), 1)
+        props = data["features"][0]["properties"]
+
+        self.assertEqual(props["id"], str(event_id))
+        self.assertEqual(props["gradcam_url"], "/static/imagery/test_gradcam.png")
+        self.assertEqual(props["land_cover_confidence"], 0.942)
+        self.assertEqual(props["ml_model_arch"], "efficientnet_b0")
+        self.assertEqual(props["land_cover_class"], "industrial_thermal")
+
+    def test_event_dossier_endpoint_includes_gradcam_and_ml_attributes(self):
+        """Verify GET /api/events/{event_id} exposes gradcam_url, land_cover_confidence, and ml_model_arch in dossier."""
+        event_id = uuid4()
+        conn = _FakeConn(
+            fetchrow_results=[
+                {
+                    "id": event_id,
+                    "geojson": json.dumps({"type": "Point", "coordinates": [75.85, 30.90]}),
+                    "footprint_geojson": None,
+                    "first_seen": datetime(2026, 11, 15, 10, 0, tzinfo=timezone.utc),
+                    "last_seen": datetime(2026, 11, 15, 11, 0, tzinfo=timezone.utc),
+                    "max_frp": 85.5,
+                    "priority_score": 75.0,
+                    "priority_reasons_raw": json.dumps({"base": 40, "frp": 35}),
+                    "nearest_osm_type": "industrial",
+                    "nearest_osm_name": "Steel Rolling Mill",
+                    "nearest_osm_distance_km": 0.45,
+                    "land_cover_class": "industrial_thermal",
+                    "land_cover_confidence": 0.942,
+                    "ml_model_arch": "efficientnet_b0",
+                    "ml_disclaimer": "Experimental model classification",
+                    "imagery_rgb_path": "static/imagery/test_rgb.png",
+                    "imagery_swir_path": "static/imagery/test_swir.png",
+                    "gradcam_path": "static/imagery/test_gradcam.png",
+                    "sentinel2_scene_id": "S2A_MSIL2A_TEST",
+                    "imagery_fetched_at": datetime(2026, 11, 15, 12, 0, tzinfo=timezone.utc),
+                    "detection_count": 5,
+                    "created_at": datetime(2026, 11, 15, 10, 0, tzinfo=timezone.utc),
+                    "updated_at": datetime(2026, 11, 15, 12, 0, tzinfo=timezone.utc),
+                }
+            ],
+            fetch_results=[[]],  # raw detections
+        )
+
+        with patch.object(main, "pool", _FakePool(conn)):
+            resp = self.client.get(f"/api/events/{event_id}")
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["type"], "Feature")
+        props = data["properties"]
+
+        self.assertEqual(props["id"], str(event_id))
+        self.assertEqual(props["gradcam_url"], "/static/imagery/test_gradcam.png")
+        self.assertEqual(props["land_cover_confidence"], 0.942)
+        self.assertEqual(props["ml_model_arch"], "efficientnet_b0")
+        self.assertIn("raw_detections", props)
+
+    # ------------------------------------------------------------------
+    # POST /api/analyze-sample Tests
+    # ------------------------------------------------------------------
+    def _create_test_image_bytes(self, color=(128, 128, 128), size=(64, 64), format="PNG"):
+        img = Image.new("RGB", size, color=color)
+        buf = io.BytesIO()
+        img.save(buf, format=format)
+        buf.seek(0)
+        return buf.getvalue()
+
+    def test_analyze_sample_rgb_only_with_coordinates(self):
+        """Verify POST /api/analyze-sample with RGB-only upload and valid coordinates."""
+        img_bytes = self._create_test_image_bytes(color=(200, 100, 50))
+
+        conn = _FakeConn(
+            fetchval_results=[True, 2],  # inside_india = True, nearby_events_5km = 2
+            fetchrow_results=[
+                {
+                    "nearest_osm_name": "Tata Steel Plant",
+                    "nearest_osm_type": "industrial",
+                    "dist_km": 1.85,
+                }
+            ],
+        )
+
+        with patch.object(main, "pool", _FakePool(conn)):
+            resp = self.client.post(
+                "/api/analyze-sample",
+                files={"rgb_file": ("satellite_rgb.png", img_bytes, "image/png")},
+                data={"latitude": "23.7957", "longitude": "86.4304"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+
+        self.assertIn("sample_id", data)
+        self.assertEqual(data["modality"], "RGB-Only (SWIR Synthesized)")
+        self.assertIn(data["predicted_class"], [
+            "industrial_thermal",
+            "agricultural_stubble_burn",
+            "forest_wildfire",
+            "urban_false_positive",
+        ])
+        self.assertGreaterEqual(data["confidence"], 0.0)
+        self.assertLessEqual(data["confidence"], 1.0)
+        self.assertEqual(len(data["class_probabilities"]), 4)
+        self.assertGreaterEqual(data["inference_latency_ms"], 0.0)
+
+        # File URLs
+        self.assertTrue(data["rgb_url"].startswith("/static/uploads/"))
+        self.assertIsNone(data["swir_url"])
+        self.assertTrue(data["gradcam_url"].startswith("/static/uploads/"))
+
+        # Verify physical files written to static/uploads/
+        rgb_disk_path = os.path.join(main.STATIC_DIR, data["rgb_url"].lstrip("/static/"))
+        gradcam_disk_path = os.path.join(main.STATIC_DIR, data["gradcam_url"].lstrip("/static/"))
+        self.assertTrue(os.path.isfile(rgb_disk_path))
+        self.assertTrue(os.path.isfile(gradcam_disk_path))
+
+        # Location verification
+        loc = data["location"]
+        self.assertAlmostEqual(loc["latitude"], 23.7957, places=3)
+        self.assertAlmostEqual(loc["longitude"], 86.4304, places=3)
+        self.assertTrue(loc["inside_india"])
+        self.assertEqual(loc["state"], "Jharkhand")
+        self.assertEqual(loc["nearby_events_5km"], 2)
+        self.assertIn("Tata Steel Plant", loc["nearest_infrastructure"])
+
+        # Clean up created upload files
+        if os.path.isfile(rgb_disk_path):
+            os.remove(rgb_disk_path)
+        if os.path.isfile(gradcam_disk_path):
+            os.remove(gradcam_disk_path)
+
+    def test_analyze_sample_paired_rgb_and_swir(self):
+        """Verify POST /api/analyze-sample with paired RGB and SWIR uploads."""
+        rgb_bytes = self._create_test_image_bytes(color=(180, 120, 60))
+        swir_bytes = self._create_test_image_bytes(color=(50, 150, 200))
+
+        conn = _FakeConn(
+            fetchval_results=[True, 0],
+            fetchrow_results=[None],
+        )
+
+        with patch.object(main, "pool", _FakePool(conn)):
+            resp = self.client.post(
+                "/api/analyze-sample",
+                files={
+                    "rgb_file": ("chip_rgb.png", rgb_bytes, "image/png"),
+                    "swir_file": ("chip_swir.png", swir_bytes, "image/png"),
+                },
+                data={"latitude": "23.7957", "longitude": "86.4304"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+
+        self.assertEqual(data["modality"], "RGB + SWIR (Paired)")
+        self.assertIsNotNone(data["swir_url"])
+        self.assertTrue(data["swir_url"].startswith("/static/uploads/"))
+        self.assertTrue(data["gradcam_url"].startswith("/static/uploads/"))
+
+        # Clean up files
+        for url_key in ("rgb_url", "swir_url", "gradcam_url"):
+            url = data.get(url_key)
+            if url:
+                disk_path = os.path.join(main.STATIC_DIR, url.lstrip("/static/"))
+                if os.path.isfile(disk_path):
+                    os.remove(disk_path)
+
+    def test_analyze_sample_invalid_file_format(self):
+        """Verify 400 error when non-image or corrupted file is uploaded."""
+        resp = self.client.post(
+            "/api/analyze-sample",
+            files={"rgb_file": ("notes.txt", b"this is not an image", "text/plain")},
+            data={"latitude": "23.7957", "longitude": "86.4304"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Unsupported", resp.json()["detail"])
+
+    def test_analyze_sample_out_of_bounds_coordinates(self):
+        """Verify 400 error when latitude or longitude exceed WGS84 bounds."""
+        img_bytes = self._create_test_image_bytes()
+        resp = self.client.post(
+            "/api/analyze-sample",
+            files={"rgb_file": ("test.png", img_bytes, "image/png")},
+            data={"latitude": "95.5", "longitude": "86.4304"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("out of bounds", resp.json()["detail"].lower())
+
+        resp2 = self.client.post(
+            "/api/analyze-sample",
+            files={"rgb_file": ("test.png", img_bytes, "image/png")},
+            data={"latitude": "23.5", "longitude": "-195.0"},
+        )
+        self.assertEqual(resp2.status_code, 400)
+        self.assertIn("out of bounds", resp2.json()["detail"].lower())
+
+    def test_analyze_sample_no_coordinates_fallback(self):
+        """Verify fallback behavior when coordinates are omitted and no EXIF data exists."""
+        img_bytes = self._create_test_image_bytes()
+
+        resp = self.client.post(
+            "/api/analyze-sample",
+            files={"rgb_file": ("sample.png", img_bytes, "image/png")},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+
+        loc = data["location"]
+        self.assertIsNone(loc["latitude"])
+        self.assertIsNone(loc["longitude"])
+        self.assertEqual(loc["status"], "Coordinates not provided")
+
+        # Clean up
+        rgb_disk_path = os.path.join(main.STATIC_DIR, data["rgb_url"].lstrip("/static/"))
+        gradcam_disk_path = os.path.join(main.STATIC_DIR, data["gradcam_url"].lstrip("/static/"))
+        if os.path.isfile(rgb_disk_path):
+            os.remove(rgb_disk_path)
+        if os.path.isfile(gradcam_disk_path):
+            os.remove(gradcam_disk_path)
 
 
 if __name__ == "__main__":

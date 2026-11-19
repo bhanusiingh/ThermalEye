@@ -1,0 +1,219 @@
+{
+  "generated_at": "2026-11-19T20:23:26.376994+00:00",
+  "st_dbscan_sensitivity_analysis": {
+    "sample_points_evaluated": 3000,
+    "parameter_grid_size": 16,
+    "sweep": [
+      {
+        "eps_km": 1.0,
+        "eps_hours": 12,
+        "total_clusters": 2096,
+        "multi_point_clusters": 568,
+        "noise_ratio": 0.5093,
+        "mean_points_per_cluster": 2.59,
+        "max_points_in_cluster": 17,
+        "mean_cluster_duration_hours": 0.43
+      },
+      {
+        "eps_km": 1.0,
+        "eps_hours": 24,
+        "total_clusters": 1978,
+        "multi_point_clusters": 578,
+        "noise_ratio": 0.4667,
+        "mean_points_per_cluster": 2.77,
+        "max_points_in_cluster": 20,
+        "mean_cluster_duration_hours": 4.64
+      },
+      {
+        "eps_km": 1.0,
+        "eps_hours": 48,
+        "total_clusters": 1918,
+        "multi_point_clusters": 577,
+        "noise_ratio": 0.447,
+        "mean_points_per_cluster": 2.88,
+        "max_points_in_cluster": 21,
+        "mean_cluster_duration_hours": 6.8
+      },
+      {
+        "eps_km": 1.0,
+        "eps_hours": 72,
+        "total_clusters": 1918,
+        "multi_point_clusters": 577,
+        "noise_ratio": 0.447,
+        "mean_points_per_cluster": 2.88,
+        "max_points_in_cluster": 21,
+        "mean_cluster_duration_hours": 6.8
+      },
+      {
+        "eps_km": 2.0,
+        "eps_hours": 12,
+        "total_clusters": 1853,
+        "multi_point_clusters": 554,
+        "noise_ratio": 0.433,
+        "mean_points_per_cluster": 3.07,
+        "max_points_in_cluster": 17,
+        "mean_cluster_duration_hours": 0.51
+      },
+      {
+        "eps_km": 2.0,
+        "eps_hours": 24,
+        "total_clusters": 1668,
+        "multi_point_clusters": 525,
+        "noise_ratio": 0.381,
+        "mean_points_per_cluster": 3.54,
+        "max_points_in_cluster": 31,
+        "mean_cluster_duration_hours": 6.93
+      },
+      {
+        "eps_km": 2.0,
+        "eps_hours": 48,
+        "total_clusters": 1586,
+        "multi_point_clusters": 514,
+        "noise_ratio": 0.3573,
+        "mean_points_per_cluster": 3.75,
+        "max_points_in_cluster": 50,
+        "mean_cluster_duration_hours": 9.48
+      },
+      {
+        "eps_km": 2.0,
+        "eps_hours": 72,
+        "total_clusters": 1586,
+        "multi_point_clusters": 514,
+        "noise_ratio": 0.3573,
+        "mean_points_per_cluster": 3.75,
+        "max_points_in_cluster": 50,
+        "mean_cluster_duration_hours": 9.48
+      },
+      {
+        "eps_km": 3.0,
+        "eps_hours": 12,
+        "total_clusters": 1652,
+        "multi_point_clusters": 520,
+        "noise_ratio": 0.3773,
+        "mean_points_per_cluster": 3.59,
+        "max_points_in_cluster": 56,
+        "mean_cluster_duration_hours": 0.55
+      },
+      {
+        "eps_km": 3.0,
+        "eps_hours": 24,
+        "total_clusters": 1458,
+        "multi_point_clusters": 483,
+        "noise_ratio": 0.325,
+        "mean_points_per_cluster": 4.19,
+        "max_points_in_cluster": 140,
+        "mean_cluster_duration_hours": 7.56
+      },
+      {
+        "eps_km": 3.0,
+        "eps_hours": 48,
+        "total_clusters": 1377,
+        "multi_point_clusters": 478,
+        "noise_ratio": 0.2997,
+        "mean_points_per_cluster": 4.4,
+        "max_points_in_cluster": 165,
+        "mean_cluster_duration_hours": 10.09
+      },
+      {
+        "eps_km": 3.0,
+        "eps_hours": 72,
+        "total_clusters": 1377,
+        "multi_point_clusters": 478,
+        "noise_ratio": 0.2997,
+        "mean_points_per_cluster": 4.4,
+        "max_points_in_cluster": 165,
+        "mean_cluster_duration_hours": 10.09
+      },
+      {
+        "eps_km": 5.0,
+        "eps_hours": 12,
+        "total_clusters": 1369,
+        "multi_point_clusters": 473,
+        "noise_ratio": 0.2987,
+        "mean_points_per_cluster": 4.45,
+        "max_points_in_cluster": 119,
+        "mean_cluster_duration_hours": 0.69
+      },
+      {
+        "eps_km": 5.0,
+        "eps_hours": 24,
+        "total_clusters": 1166,
+        "multi_point_clusters": 419,
+        "noise_ratio": 0.249,
+        "mean_points_per_cluster": 5.38,
+        "max_points_in_cluster": 193,
+        "mean_cluster_duration_hours": 8.51
+      },
+      {
+        "eps_km": 5.0,
+        "eps_hours": 48,
+        "total_clusters": 1103,
+        "multi_point_clusters": 416,
+        "noise_ratio": 0.229,
+        "mean_points_per_cluster": 5.56,
+        "max_points_in_cluster": 379,
+        "mean_cluster_duration_hours": 10.93
+      },
+      {
+        "eps_km": 5.0,
+        "eps_hours": 72,
+        "total_clusters": 1103,
+        "multi_point_clusters": 416,
+        "noise_ratio": 0.229,
+        "mean_points_per_cluster": 5.56,
+        "max_points_in_cluster": 379,
+        "mean_cluster_duration_hours": 10.93
+      }
+    ]
+  },
+  "priority_scoring_validation": {
+    "events_evaluated": 6183,
+    "total_high_consequence_events": 51,
+    "spearman_rank_correlation": {
+      "priority_vs_max_frp": {
+        "rho": 0.3136,
+        "p_value": 3.5057e-141
+      },
+      "priority_vs_persistence_hours": {
+        "rho": 0.2864,
+        "p_value": 4.373e-117
+      },
+      "priority_vs_detection_count": {
+        "rho": 0.4562,
+        "p_value": 0.0
+      },
+      "ablated_vs_max_frp": {
+        "rho": 0.3936
+      },
+      "ablated_vs_persistence_hours": {
+        "rho": 0.3623
+      }
+    },
+    "precision_at_k": {
+      "top_10": {
+        "k": 10,
+        "full_pipeline_precision": 0.9,
+        "osm_ablated_precision": 0.6,
+        "osm_precision_lift": 0.3
+      },
+      "top_25": {
+        "k": 25,
+        "full_pipeline_precision": 0.96,
+        "osm_ablated_precision": 0.44,
+        "osm_precision_lift": 0.52
+      },
+      "top_50": {
+        "k": 50,
+        "full_pipeline_precision": 0.5,
+        "osm_ablated_precision": 0.24,
+        "osm_precision_lift": 0.26
+      },
+      "top_100": {
+        "k": 100,
+        "full_pipeline_precision": 0.25,
+        "osm_ablated_precision": 0.17,
+        "osm_precision_lift": 0.08
+      }
+    }
+  }
+}

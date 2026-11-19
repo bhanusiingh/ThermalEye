@@ -510,42 +510,120 @@ def _commit_event_score(
 
 
 # ---------------------------------------------------------------------------
+# Local PostGIS OSM Spatial Index Lookup
+# ---------------------------------------------------------------------------
+def check_local_osm_count(engine) -> int:
+    """Return count of features in local osm_industrial_features table."""
+    with engine.connect() as conn:
+        table_exists = conn.execute(
+            text(
+                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'osm_industrial_features')"
+            )
+        ).scalar()
+        if not table_exists:
+            return 0
+        return int(
+            conn.execute(text("SELECT COUNT(*) FROM osm_industrial_features")).scalar()
+            or 0
+        )
+
+
+def query_nearest_local_osm(
+    conn, lon: float, lat: float, radius_m: float = 5000.0
+) -> Optional[Dict[str, Any]]:
+    """
+    Query the nearest industrial/power/mining feature within radius_m meters
+    using PostGIS spatial index.
+    """
+    query = text(
+        """
+        SELECT
+            name,
+            osm_type,
+            category,
+            ST_Distance(
+                geom::geography,
+                ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography
+            ) AS dist_m
+        FROM osm_industrial_features
+        WHERE ST_DWithin(
+            geom::geography,
+            ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+            :radius_m
+        )
+        ORDER BY ST_Distance(
+            geom::geography,
+            ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography
+        ) ASC
+        LIMIT 1
+        """
+    )
+    row = conn.execute(query, {"lon": lon, "lat": lat, "radius_m": radius_m}).fetchone()
+    if not row:
+        return None
+
+    return {
+        "name": row[0],
+        "osm_type": row[1],
+        "category": row[2],
+        "dist_m": float(row[3]),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Pipeline Orchestrator
 # ---------------------------------------------------------------------------
-def process_enrichment(batch_limit: int = OSM_BATCH_LIMIT) -> Dict[str, int]:
+def process_enrichment(
+    batch_limit: int = OSM_BATCH_LIMIT,
+    re_enrich_rate_limited: bool = False,
+    db_url: Optional[str] = None,
+) -> Dict[str, int]:
     """
     Process candidate events needing OSM enrichment:
-      • Resumable: Selects events WHERE priority_reasons IS NULL.
-      • Uses spatial caching to avoid redundant calls for nearby events.
-      • Decoupled from external API: wraps fetch_osm_infrastructure in try...except.
-      • On rate limit / timeout / RetryError: sets nearest_name and nearest_type to NULL,
-        calculates local score (frp + persistence, infra=0), injects fallback note
-        "0/30 (Overpass Rate Limited)", and commits valid score to candidate_events.
+      • Local-first: If osm_industrial_features has features, uses local PostGIS ST_DWithin.
+      • Fallback: If osm_industrial_features is empty, falls back to Overpass API.
+      • Resumable: Selects events WHERE priority_reasons IS NULL (or re-enriches if requested).
     """
     logger.info("=" * 60)
     logger.info("ThermalEye — OSM Enrichment and Scoring Worker Starting")
-    logger.info("Primary Endpoint: %s", OVERPASS_URL)
-    logger.info("Fallback Endpoints: %s", OVERPASS_FALLBACK_URLS)
     logger.info("Batch Limit: %s (0=unlimited)", batch_limit)
+    logger.info("Re-enrich rate limited: %s", re_enrich_rate_limited)
     logger.info("=" * 60)
 
-    engine = create_engine(DB_URL)
+    resolved_db = db_url or DB_URL
+    engine = create_engine(resolved_db)
+
+    local_count = check_local_osm_count(engine)
+    logger.info("Local osm_industrial_features count: %d", local_count)
 
     stats = {
         "processed": 0,
         "successful": 0,
+        "enriched": 0,
+        "none_nearby": 0,
         "cached": 0,
         "rate_limited": 0,
         "failed": 0,
     }
 
-    # Resumable query: only select events where priority_reasons IS NULL
-    query_sql = """
-        SELECT id, ST_X(centroid) as lon, ST_Y(centroid) as lat, max_frp, detection_count 
-        FROM candidate_events 
-        WHERE priority_reasons IS NULL
-        ORDER BY max_frp DESC NULLS LAST
-    """
+    # Query events
+    if re_enrich_rate_limited:
+        query_sql = """
+            SELECT id, ST_X(centroid) as lon, ST_Y(centroid) as lat, max_frp, detection_count 
+            FROM candidate_events 
+            WHERE priority_reasons IS NULL
+               OR priority_reasons::text ILIKE '%Rate Limited%'
+               OR nearest_osm_name IS NULL
+            ORDER BY max_frp DESC NULLS LAST
+        """
+    else:
+        query_sql = """
+            SELECT id, ST_X(centroid) as lon, ST_Y(centroid) as lat, max_frp, detection_count 
+            FROM candidate_events 
+            WHERE priority_reasons IS NULL
+            ORDER BY max_frp DESC NULLS LAST
+        """
+
     if batch_limit > 0:
         query_sql += f" LIMIT {batch_limit}"
 
@@ -570,6 +648,7 @@ def process_enrichment(batch_limit: int = OSM_BATCH_LIMIT) -> Dict[str, int]:
                         UPDATE candidate_events 
                         SET nearest_osm_name = :name, 
                             nearest_osm_type = :type, 
+                            nearest_osm_distance_km = :dist_km,
                             priority_score = :score, 
                             priority_reasons = CAST(:reasons AS jsonb),
                             updated_at = NOW()
@@ -580,127 +659,190 @@ def process_enrichment(batch_limit: int = OSM_BATCH_LIMIT) -> Dict[str, int]:
                 )
         batch_buffer.clear()
 
-    for idx, event in enumerate(events, 1):
-        event_id = event.id
-        lat, lon = event.lat, event.lon
+    if local_count > 0:
+        logger.info("Using Local PostGIS Mode (Index size: %d features)...", local_count)
+        with engine.connect() as read_conn:
+            for idx, event in enumerate(events, 1):
+                event_id = event.id
+                lat, lon = float(event.lat), float(event.lon)
 
-        # 1. Check spatial cache for nearby known facility
-        cached_facility = spatial_cache.find_nearest_facility(lat, lon, DEFAULT_SEARCH_RADIUS)
-        if cached_facility:
-            nearest_name, nearest_type, _ = cached_facility
+                match = query_nearest_local_osm(read_conn, lon, lat, radius_m=5000.0)
+                if match:
+                    nearest_name = match["name"]
+                    nearest_type = match["osm_type"]
+                    dist_km = round(match["dist_m"] / 1000.0, 3)
+                    stats["enriched"] += 1
+                else:
+                    nearest_name = None
+                    nearest_type = None
+                    dist_km = None
+                    stats["none_nearby"] += 1
+
+                score, reasons = compute_priority_score(
+                    event.max_frp,
+                    event.detection_count,
+                    nearest_type,
+                    rate_limited=False,
+                )
+
+                batch_buffer.append(
+                    {
+                        "name": nearest_name,
+                        "type": nearest_type,
+                        "dist_km": dist_km,
+                        "score": score,
+                        "reasons": reasons,
+                        "id": str(event_id),
+                    }
+                )
+                stats["successful"] += 1
+                stats["processed"] += 1
+
+                if len(batch_buffer) >= 200:
+                    flush_batch()
+
+                if stats["processed"] % 1000 == 0 or stats["processed"] == total_to_process:
+                    logger.info(
+                        "Local Enrichment Progress: %d/%d processed (Enriched: %d, NoneNearby: %d)",
+                        stats["processed"],
+                        total_to_process,
+                        stats["enriched"],
+                        stats["none_nearby"],
+                    )
+
+        flush_batch()
+
+    else:
+        logger.warning("Local osm_industrial_features is empty. Falling back to Overpass API.")
+        for idx, event in enumerate(events, 1):
+            event_id = event.id
+            lat, lon = float(event.lat), float(event.lon)
+
+            # 1. Check spatial cache for nearby known facility
+            cached_facility = spatial_cache.find_nearest_facility(lat, lon, DEFAULT_SEARCH_RADIUS)
+            if cached_facility:
+                nearest_name, nearest_type, dist_m = cached_facility
+                score, reasons = compute_priority_score(
+                    event.max_frp, event.detection_count, nearest_type, rate_limited=False
+                )
+                batch_buffer.append(
+                    {
+                        "name": nearest_name,
+                        "type": nearest_type,
+                        "dist_km": round(dist_m / 1000.0, 3),
+                        "score": score,
+                        "reasons": reasons,
+                        "id": str(event_id),
+                    }
+                )
+                stats["cached"] += 1
+                stats["successful"] += 1
+                stats["processed"] += 1
+                if len(batch_buffer) >= 100:
+                    flush_batch()
+                continue
+
+            # 2. Check if event is in a known empty zone
+            if spatial_cache.is_in_empty_zone(lat, lon):
+                score, reasons = compute_priority_score(
+                    event.max_frp, event.detection_count, None, rate_limited=False
+                )
+                batch_buffer.append(
+                    {
+                        "name": None,
+                        "type": None,
+                        "dist_km": None,
+                        "score": score,
+                        "reasons": reasons,
+                        "id": str(event_id),
+                    }
+                )
+                stats["cached"] += 1
+                stats["successful"] += 1
+                stats["processed"] += 1
+                if len(batch_buffer) >= 100:
+                    flush_batch()
+                continue
+
+            # 3. Not in cache: query Overpass via fetch_osm_infrastructure inside try...except
+            nearest_name = None
+            nearest_type = None
+            dist_km = None
+            rate_limited = False
+
+            try:
+                osm_data = fetch_osm_infrastructure(lat, lon, radius=DEFAULT_SEARCH_RADIUS)
+                elements = osm_data.get("elements", []) if isinstance(osm_data, dict) else []
+                if elements:
+                    spatial_cache.add_facilities(elements)
+                    match = spatial_cache.find_nearest_facility(lat, lon, DEFAULT_SEARCH_RADIUS)
+                    if match:
+                        nearest_name, nearest_type, dist_m = match
+                        dist_km = round(dist_m / 1000.0, 3)
+                        stats["enriched"] += 1
+                    else:
+                        stats["none_nearby"] += 1
+                else:
+                    spatial_cache.add_empty_zone(lat, lon, DEFAULT_SEARCH_RADIUS)
+                    stats["none_nearby"] += 1
+                stats["successful"] += 1
+
+            except (
+                requests.exceptions.Timeout,
+                requests.exceptions.HTTPError,
+                RetryError,
+                requests.exceptions.RequestException,
+            ) as exc:
+                if stats["rate_limited"] == 0:
+                    logger.warning(
+                        "Overpass API unavailable/rate-limited for event %s (lat=%.3f, lon=%.3f): %s. Decoupling scoring.",
+                        event_id,
+                        lat,
+                        lon,
+                        exc,
+                    )
+                nearest_name = None
+                nearest_type = None
+                dist_km = None
+                rate_limited = True
+                stats["rate_limited"] += 1
+
+            # 4. Calculate score (using local data + fallback note if rate_limited)
             score, reasons = compute_priority_score(
-                event.max_frp, event.detection_count, nearest_type, rate_limited=False
+                event.max_frp,
+                event.detection_count,
+                nearest_type,
+                rate_limited=rate_limited,
             )
+
+            # 5. Buffer score to commit in batch
             batch_buffer.append(
                 {
                     "name": nearest_name,
                     "type": nearest_type,
+                    "dist_km": dist_km,
                     "score": score,
                     "reasons": reasons,
                     "id": str(event_id),
                 }
             )
-            stats["cached"] += 1
-            stats["successful"] += 1
             stats["processed"] += 1
+
             if len(batch_buffer) >= 100:
                 flush_batch()
-            continue
 
-        # 2. Check if event is in a known empty zone
-        if spatial_cache.is_in_empty_zone(lat, lon):
-            score, reasons = compute_priority_score(
-                event.max_frp, event.detection_count, None, rate_limited=False
-            )
-            batch_buffer.append(
-                {
-                    "name": None,
-                    "type": None,
-                    "score": score,
-                    "reasons": reasons,
-                    "id": str(event_id),
-                }
-            )
-            stats["cached"] += 1
-            stats["successful"] += 1
-            stats["processed"] += 1
-            if len(batch_buffer) >= 100:
-                flush_batch()
-            continue
-
-        # 3. Not in cache: query Overpass via fetch_osm_infrastructure inside try...except
-        nearest_name = None
-        nearest_type = None
-        rate_limited = False
-
-        try:
-            osm_data = fetch_osm_infrastructure(lat, lon, radius=DEFAULT_SEARCH_RADIUS)
-            elements = osm_data.get("elements", []) if isinstance(osm_data, dict) else []
-            if elements:
-                spatial_cache.add_facilities(elements)
-                match = spatial_cache.find_nearest_facility(lat, lon, DEFAULT_SEARCH_RADIUS)
-                if match:
-                    nearest_name, nearest_type, _ = match
-            else:
-                spatial_cache.add_empty_zone(lat, lon, DEFAULT_SEARCH_RADIUS)
-            stats["successful"] += 1
-
-        except (
-            requests.exceptions.Timeout,
-            requests.exceptions.HTTPError,
-            RetryError,
-            requests.exceptions.RequestException,
-        ) as exc:
-            # Overpass API rate-limited or timed out: fall back gracefully to local scoring
-            if stats["rate_limited"] == 0:
-                logger.warning(
-                    "Overpass API unavailable/rate-limited for event %s (lat=%.3f, lon=%.3f): %s. Decoupling scoring.",
-                    event_id,
-                    lat,
-                    lon,
-                    exc,
+            if stats["processed"] % 500 == 0 or stats["processed"] == total_to_process:
+                logger.info(
+                    "Progress: %d/%d processed (Success: %d, Cached: %d, RateLimits: %d, Failed: %d)",
+                    stats["processed"],
+                    total_to_process,
+                    stats["successful"],
+                    stats["cached"],
+                    stats["rate_limited"],
+                    stats["failed"],
                 )
-            nearest_name = None
-            nearest_type = None
-            rate_limited = True
-            stats["rate_limited"] += 1
 
-        # 4. Calculate score (using local data + fallback note if rate_limited)
-        score, reasons = compute_priority_score(
-            event.max_frp,
-            event.detection_count,
-            nearest_type,
-            rate_limited=rate_limited,
-        )
-
-        # 5. Buffer score to commit in batch
-        batch_buffer.append(
-            {
-                "name": nearest_name,
-                "type": nearest_type,
-                "score": score,
-                "reasons": reasons,
-                "id": str(event_id),
-            }
-        )
-        stats["processed"] += 1
-
-        if len(batch_buffer) >= 100:
-            flush_batch()
-
-        if stats["processed"] % 500 == 0 or stats["processed"] == total_to_process:
-            logger.info(
-                "Progress: %d/%d processed (Success: %d, Cached: %d, RateLimits: %d, Failed: %d)",
-                stats["processed"],
-                total_to_process,
-                stats["successful"],
-                stats["cached"],
-                stats["rate_limited"],
-                stats["failed"],
-            )
-
-    # Flush any remaining items in buffer
-    flush_batch()
+        flush_batch()
 
     logger.info("=" * 60)
     logger.info("OSM enrichment and scoring complete.")
@@ -710,4 +852,31 @@ def process_enrichment(batch_limit: int = OSM_BATCH_LIMIT) -> Dict[str, int]:
 
 
 if __name__ == "__main__":
-    process_enrichment()
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Enrich candidate events with nearby industrial/power infrastructure."
+    )
+    parser.add_argument(
+        "--batch-limit",
+        type=int,
+        default=OSM_BATCH_LIMIT,
+        help="Maximum candidate events to process (0 = all)",
+    )
+    parser.add_argument(
+        "--re-enrich-rate-limited",
+        action="store_true",
+        help="Re-process all candidate events marked rate-limited or lacking OSM results",
+    )
+    parser.add_argument(
+        "--db-url",
+        type=str,
+        default=None,
+        help="Optional database connection URL",
+    )
+    args = parser.parse_args()
+
+    process_enrichment(
+        batch_limit=args.batch_limit,
+        re_enrich_rate_limited=args.re_enrich_rate_limited,
+        db_url=args.db_url,
+    )

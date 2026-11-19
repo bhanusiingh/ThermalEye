@@ -100,7 +100,7 @@ IMAGE_SIZE_PX: int = int(os.environ.get("IMAGE_SIZE_PX", "512"))
 BBOX_HALF_DEG: float = float(os.environ.get("BBOX_HALF_DEG", "0.05"))
 # Minimum priority_score to fetch imagery (saves API quota)
 MIN_PRIORITY_SCORE: float = float(os.environ.get("MIN_PRIORITY_IMAGERY", "0"))
-IMAGERY_BATCH_LIMIT: int = int(os.environ.get("IMAGERY_BATCH_LIMIT", "0"))
+IMAGERY_BATCH_LIMIT: int = int(os.environ.get("IMAGERY_BATCH_LIMIT", "25"))
 
 # HTTP timeouts (seconds)
 HTTP_CONNECT_TIMEOUT: float = float(os.environ.get("HTTP_CONNECT_TIMEOUT", "15"))
@@ -117,6 +117,27 @@ if not CDSE_CLIENT_ID or not CDSE_CLIENT_SECRET:
     sys.exit(1)
 
 IMAGERY_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Circuit Breaker Exception & State
+# ---------------------------------------------------------------------------
+class CDSECircuitBreakerError(RuntimeError):
+    """Raised when CDSE OAuth2 or STAC service is deemed unavailable."""
+    pass
+
+
+_cdse_circuit_open: bool = False
+_stac_consecutive_failures: int = 0
+
+
+def reset_circuit_breaker() -> None:
+    """Reset circuit breaker flags and failure counters (for testing and recovery)."""
+    global _cdse_circuit_open, _stac_consecutive_failures, _cached_token, _token_expiry
+    _cdse_circuit_open = False
+    _stac_consecutive_failures = 0
+    _cached_token = None
+    _token_expiry = datetime.min.replace(tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -143,15 +164,31 @@ _cached_token: Optional[str] = None
 _token_expiry: datetime = datetime.min.replace(tzinfo=timezone.utc)
 
 
+def _on_token_retry_exhausted(retry_state):
+    """Callback when OAuth2 token acquisition exhausts all retries."""
+    global _cdse_circuit_open
+    if not _cdse_circuit_open:
+        _cdse_circuit_open = True
+        logger.warning(
+            "CDSE OAuth2 token acquisition exhausted retries. Circuit breaker tripped open."
+        )
+    if retry_state.outcome and retry_state.outcome.failed:
+        raise retry_state.outcome.exception()
+    raise RuntimeError("CDSE OAuth2 token acquisition failed.")
+
+
 @retry(
     retry=retry_if_exception(_is_retryable),
     stop=stop_after_attempt(4),
     wait=wait_exponential(multiplier=2, min=2, max=30),
     before_sleep=before_sleep_log(logger, logging.WARNING),
-    reraise=True,
+    retry_error_callback=_on_token_retry_exhausted,
 )
 def _fetch_new_token() -> tuple[str, datetime]:
     """Obtain a fresh OAuth2 access token from CDSE."""
+    global _cdse_circuit_open
+    if _cdse_circuit_open:
+        raise CDSECircuitBreakerError("CDSE circuit breaker is open; token acquisition aborted.")
     logger.info("Requesting new CDSE OAuth2 token…")
     resp = requests.post(
         CDSE_TOKEN_URL,
@@ -176,10 +213,21 @@ def _fetch_new_token() -> tuple[str, datetime]:
 
 def get_cdse_token() -> str:
     """Return a valid CDSE access token, refreshing if expired."""
-    global _cached_token, _token_expiry
+    global _cached_token, _token_expiry, _cdse_circuit_open
+    if _cdse_circuit_open:
+        raise CDSECircuitBreakerError("CDSE circuit breaker is open; token acquisition aborted.")
     if _cached_token and datetime.now(timezone.utc) < _token_expiry:
         return _cached_token
-    _cached_token, _token_expiry = _fetch_new_token()
+    try:
+        _cached_token, _token_expiry = _fetch_new_token()
+    except Exception as exc:
+        if not _cdse_circuit_open:
+            _cdse_circuit_open = True
+            logger.warning(
+                "CDSE OAuth2 token acquisition failed after retries (%s). Circuit breaker tripped open.",
+                exc,
+            )
+        raise CDSECircuitBreakerError(f"OAuth2 token acquisition failed: {exc}") from exc
     return _cached_token
 
 
@@ -197,19 +245,14 @@ def _auth_headers() -> dict[str, str]:
     before_sleep=before_sleep_log(logger, logging.WARNING),
     reraise=True,
 )
-def search_sentinel2_scenes(
+def _search_sentinel2_scenes_request(
     lon: float,
     lat: float,
     date_start: datetime,
     date_end: datetime,
 ) -> list[dict]:
     """
-    Query the CDSE STAC catalog for Sentinel-2 L2A scenes that
-    intersect the event centroid within the date range and have
-    cloud cover < MAX_CLOUD_COVER%.
-
-    Sentinel Hub STAC does not support the 'query' extension in the payload;
-    filtering by cloud cover is performed on the returned features.
+    Execute the underlying HTTP request to the CDSE STAC catalog.
     """
     bbox = [
         lon - BBOX_HALF_DEG,
@@ -285,6 +328,65 @@ def search_sentinel2_scenes(
     return features
 
 
+def search_sentinel2_scenes(
+    lon: float,
+    lat: float,
+    date_start: datetime,
+    date_end: datetime,
+) -> list[dict]:
+    """
+    Query the CDSE STAC catalog for Sentinel-2 L2A scenes that
+    intersect the event centroid within the date range and have
+    cloud cover < MAX_CLOUD_COVER%.
+
+    Sentinel Hub STAC does not support the 'query' extension in the payload;
+    filtering by cloud cover is performed on the returned features.
+
+    Circuit breaker behavior:
+    Tracks consecutive network timeouts / 5xx errors. If 3 consecutive
+    STAC searches fail, trips _cdse_circuit_open = True and raises
+    CDSECircuitBreakerError.
+    """
+    global _cdse_circuit_open, _stac_consecutive_failures
+    if _cdse_circuit_open:
+        raise CDSECircuitBreakerError("CDSE circuit breaker is open; STAC search aborted.")
+
+    try:
+        features = _search_sentinel2_scenes_request(lon, lat, date_start, date_end)
+        _stac_consecutive_failures = 0
+        return features
+    except CDSECircuitBreakerError:
+        raise
+    except Exception as exc:
+        is_server_or_network_error = False
+        if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+            is_server_or_network_error = True
+        elif isinstance(exc, requests.exceptions.HTTPError):
+            code = getattr(getattr(exc, "response", None), "status_code", 0)
+            if code >= 500:
+                is_server_or_network_error = True
+
+        if is_server_or_network_error:
+            _stac_consecutive_failures += 1
+            if _stac_consecutive_failures >= 3:
+                if not _cdse_circuit_open:
+                    _cdse_circuit_open = True
+                    logger.warning(
+                        "CDSE STAC requests failed 3 consecutive times with timeouts/5xx (%s). Circuit breaker tripped open.",
+                        exc,
+                    )
+                raise CDSECircuitBreakerError(
+                    "CDSE STAC circuit breaker tripped after 3 consecutive failures."
+                ) from exc
+            else:
+                logger.warning(
+                    "CDSE STAC request failed with timeout/5xx (%d/3 consecutive): %s",
+                    _stac_consecutive_failures,
+                    exc,
+                )
+        raise
+
+
 # ---------------------------------------------------------------------------
 # Evalscript definitions
 # ---------------------------------------------------------------------------
@@ -347,17 +449,13 @@ function evaluatePixel(sample) {
     before_sleep=before_sleep_log(logger, logging.WARNING),
     reraise=True,
 )
-def download_image_chip(
+def _download_image_chip_request(
     lon: float,
     lat: float,
     scene_datetime: str,
     evalscript: str,
     output_path: Path,
 ) -> bool:
-    """
-    Use the CDSE Sentinel Hub Process API to render and download
-    a 512x512 PNG image chip.
-    """
     bbox = [
         lon - BBOX_HALF_DEG,
         lat - BBOX_HALF_DEG,
@@ -435,6 +533,22 @@ def download_image_chip(
         return False
 
 
+def download_image_chip(
+    lon: float,
+    lat: float,
+    scene_datetime: str,
+    evalscript: str,
+    output_path: Path,
+) -> bool:
+    """
+    Use the CDSE Sentinel Hub Process API to render and download
+    a 512x512 PNG image chip.
+    """
+    if _cdse_circuit_open:
+        raise CDSECircuitBreakerError("CDSE circuit breaker is open; chip download aborted.")
+    return _download_image_chip_request(lon, lat, scene_datetime, evalscript, output_path)
+
+
 # ---------------------------------------------------------------------------
 # Fetch imagery for a single event
 # ---------------------------------------------------------------------------
@@ -449,6 +563,9 @@ def fetch_event_imagery(
     Search for Sentinel-2 scenes and download RGB + SWIR chips.
     Returns a dict with keys: rgb_path, swir_path, scene_id (None if not found).
     """
+    if _cdse_circuit_open:
+        raise CDSECircuitBreakerError("CDSE circuit breaker is open.")
+
     search_start = first_seen
     search_end = last_seen + timedelta(days=LOOKFORWARD_DAYS)
 
@@ -458,11 +575,7 @@ def fetch_event_imagery(
 
     result = {"rgb_path": None, "swir_path": None, "scene_id": None}
 
-    try:
-        scenes = search_sentinel2_scenes(lon, lat, search_start, search_end)
-    except Exception:
-        logger.exception("STAC search failed for event %s.", event_id)
-        return result
+    scenes = search_sentinel2_scenes(lon, lat, search_start, search_end)
 
     if not scenes:
         logger.warning(
@@ -493,7 +606,11 @@ def fetch_event_imagery(
     try:
         if download_image_chip(lon, lat, scene_dt, EVALSCRIPT_TRUE_COLOR, rgb_path):
             result["rgb_path"] = f"static/imagery/{event_id}_rgb.png"
+    except CDSECircuitBreakerError:
+        raise
     except Exception:
+        if _cdse_circuit_open:
+            raise
         logger.exception("Failed to download RGB chip for event %s.", event_id)
 
     # Download SWIR chip
@@ -501,7 +618,11 @@ def fetch_event_imagery(
     try:
         if download_image_chip(lon, lat, scene_dt, EVALSCRIPT_SWIR, swir_path):
             result["swir_path"] = f"static/imagery/{event_id}_swir.png"
+    except CDSECircuitBreakerError:
+        raise
     except Exception:
+        if _cdse_circuit_open:
+            raise
         logger.exception("Failed to download SWIR chip for event %s.", event_id)
 
     return result
@@ -556,6 +677,11 @@ def run_imagery_fetch(batch_limit: int = IMAGERY_BATCH_LIMIT) -> dict:
     logger.info("ThermalEye — Sentinel-2 imagery fetch starting")
     logger.info("=" * 60)
 
+    global _cdse_circuit_open
+    if _cdse_circuit_open:
+        logger.warning("CDSE circuit breaker is currently open; aborting imagery fetch batch.")
+        return {"processed": 0, "imagery_found": 0, "no_imagery": 0, "errors": 0, "circuit_open": True}
+
     engine = create_engine(DATABASE_URL, echo=False)
 
     query_sql = """
@@ -565,49 +691,93 @@ def run_imagery_fetch(batch_limit: int = IMAGERY_BATCH_LIMIT) -> dict:
             ST_Y(centroid) AS lat,
             first_seen,
             last_seen,
-            priority_score
+            priority_score,
+            max_frp
         FROM candidate_events
         WHERE imagery_fetched_at IS NULL
           AND (priority_score >= :min_score OR priority_score IS NULL)
-        ORDER BY priority_score DESC NULLS LAST
+        ORDER BY priority_score DESC NULLS LAST, max_frp DESC NULLS LAST
     """
+    params: dict[str, Any] = {"min_score": MIN_PRIORITY_SCORE}
     if batch_limit > 0:
-        query_sql += f" LIMIT {batch_limit}"
+        query_sql += " LIMIT :limit"
+        params["limit"] = batch_limit
 
     with engine.connect() as conn:
-        rows = conn.execute(
-            text(query_sql),
-            {"min_score": MIN_PRIORITY_SCORE},
-        ).fetchall()
+        rows = conn.execute(text(query_sql), params).fetchall()
 
-    logger.info("Found %d events needing imagery.", len(rows))
+    logger.info(
+        "Found %d events needing imagery (batch limit: %s).",
+        len(rows),
+        batch_limit if batch_limit > 0 else "unlimited",
+    )
 
     stats = {"processed": 0, "imagery_found": 0, "no_imagery": 0, "errors": 0}
 
     for row in rows:
+        if _cdse_circuit_open:
+            logger.warning(
+                "CDSE circuit breaker open; aborting remaining imagery fetch batch (%d events remaining).",
+                len(rows) - stats["processed"],
+            )
+            break
+
         event_id = row[0]
         lon, lat = row[1], row[2]
         first_seen, last_seen = row[3], row[4]
 
         try:
             imagery = fetch_event_imagery(event_id, lon, lat, first_seen, last_seen)
+            if _cdse_circuit_open:
+                logger.warning(
+                    "CDSE circuit breaker tripped during event %s; aborting remaining batch without updating DB.",
+                    event_id[:8],
+                )
+                break
+
             update_event_imagery(engine, event_id, imagery)
 
             if imagery.get("rgb_path") or imagery.get("swir_path"):
                 stats["imagery_found"] += 1
             else:
                 stats["no_imagery"] += 1
-        except Exception:
-            logger.exception("Error processing event %s.", event_id)
-            # Record attempt so it is not re-queried indefinitely
-            update_event_imagery(
-                engine,
-                event_id,
-                {"rgb_path": None, "swir_path": None, "scene_id": None},
-            )
-            stats["errors"] += 1
+            stats["processed"] += 1
 
-        stats["processed"] += 1
+        except CDSECircuitBreakerError as exc:
+            logger.warning(
+                "CDSE circuit breaker active for event %s (%s). Aborting batch immediately.",
+                event_id[:8],
+                exc,
+            )
+            break
+        except Exception as exc:
+            if _cdse_circuit_open:
+                logger.warning(
+                    "CDSE circuit breaker active after error in event %s; aborting batch immediately.",
+                    event_id[:8],
+                )
+                break
+
+            is_transient = isinstance(
+                exc,
+                (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.HTTPError),
+            )
+            if is_transient:
+                logger.warning(
+                    "Transient network/server error fetching imagery for event %s: %s. Leaving imagery_fetched_at as NULL for retry.",
+                    event_id[:8],
+                    exc,
+                )
+                stats["errors"] += 1
+            else:
+                logger.exception("Permanent data error processing event %s.", event_id)
+                update_event_imagery(
+                    engine,
+                    event_id,
+                    {"rgb_path": None, "swir_path": None, "scene_id": None},
+                )
+                stats["errors"] += 1
+                stats["processed"] += 1
 
     logger.info("Imagery fetch complete. Summary: %s", stats)
     return stats

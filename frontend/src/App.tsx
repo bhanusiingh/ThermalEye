@@ -8,6 +8,7 @@ import { LightingEffect, AmbientLight, DirectionalLight } from "@deck.gl/core";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./index.css";
 import EventDossierPanel from "./components/EventDossierPanel";
+import SampleAnalyzerModal from "./components/SampleAnalyzerModal";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -286,6 +287,12 @@ interface EventProperties {
   nearest_osm_name: string | null;
   nearest_osm_distance_km: number | null;
   land_cover_class: string | null;
+  land_cover_confidence?: number | null;
+  ml_model_arch?: string | null;
+  ml_disclaimer?: string | null;
+  imagery_rgb_url?: string | null;
+  imagery_swir_url?: string | null;
+  gradcam_url?: string | null;
   detection_count: number | null;
   footprint: GeoJSON.Geometry | null;
   osm_disclaimer: string;
@@ -307,6 +314,9 @@ export default function App() {
   const [indiaBoundary, setIndiaBoundary] = useState<any>(null);
   const [rawMapStyle, setRawMapStyle] = useState<any>(null);
   const [deepLinkEventCentered, setDeepLinkEventCentered] = useState(false);
+  const [isAnalyzeOpen, setIsAnalyzeOpen] = useState(false);
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
+  const [pickedCoordinates, setPickedCoordinates] = useState<{ lat: number; lon: number } | null>(null);
 
   // ---- Sync Theme Attribute & Persistence ---------------------------------
   useEffect(() => {
@@ -322,11 +332,16 @@ export default function App() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
 
-  // ---- Deep-linking: ?event=<id> and ?state=<name> -------------------------
+  // ---- Deep-linking: ?event=<id>, ?state=<name>, ?analyze=1 ---------------
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const eventParam = params.get("event");
     const stateParam = params.get("state");
+    const analyzeParam = params.get("analyze");
+
+    if (analyzeParam === "1") {
+      setIsAnalyzeOpen(true);
+    }
 
     if (eventParam && eventParam.trim()) {
       setSelectedEventId(eventParam.trim());
@@ -345,6 +360,18 @@ export default function App() {
       }
     }
   }, []);
+
+  // Cancel location picking mode on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isPickingLocation) {
+        setIsPickingLocation(false);
+        setIsAnalyzeOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPickingLocation]);
 
   // Center on deep-linked event once active events load (if no ?state was given)
   useEffect(() => {
@@ -404,18 +431,29 @@ export default function App() {
   const fetchActiveEvents = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/events/active?days=7`);
+      const res = await fetch(`${API_BASE}/api/v1/events/active?days=7`, {
+        signal: controller.signal,
+      });
       if (!res.ok) {
+        console.error(`[ThermalEye] Events API request failed with HTTP ${res.status}: ${res.statusText}`);
         throw new Error(`API returned ${res.status}: ${res.statusText}`);
       }
       const data: EventFeatureCollection = await res.json();
       setEventsData(data);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to fetch events.";
+      const isAbort = err instanceof Error && err.name === "AbortError";
+      const message = isAbort
+        ? "Request timed out after 15 seconds."
+        : err instanceof Error
+        ? err.message
+        : "Failed to fetch events.";
       setError(message);
       console.error("[ThermalEye] Fetch error:", err);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   }, []);
@@ -459,13 +497,20 @@ export default function App() {
 
   // ---- Click handler ------------------------------------------------------
   const handleClick = useCallback((info: any) => {
+    if (isPickingLocation && info?.coordinate) {
+      const [lon, lat] = info.coordinate;
+      setPickedCoordinates({ lat, lon });
+      setIsPickingLocation(false);
+      setIsAnalyzeOpen(true);
+      return;
+    }
     if (info?.object) {
       const id = info.object.id ?? info.object.properties?.id;
       if (id) {
         setSelectedEventId(id);
       }
     }
-  }, []);
+  }, [isPickingLocation]);
 
   // ---- Deck.gl layers -----------------------------------------------------
   const layers = useMemo(() => {
@@ -710,6 +755,29 @@ export default function App() {
 
             <button
               type="button"
+              onClick={() => setIsAnalyzeOpen(true)}
+              className="btn"
+              title="Upload and analyze satellite image sample"
+              aria-label="Analyze Sample"
+            >
+              <svg
+                className="w-3.5 h-3.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                <line x1="12" y1="22.08" x2="12" y2="12" />
+              </svg>
+              <span className="te-btn-label">Analyze Sample</span>
+            </button>
+
+            <button
+              type="button"
               onClick={toggleTheme}
               className="tgl"
               aria-label="Switch colour theme"
@@ -756,6 +824,30 @@ export default function App() {
         </div>
       </header>
 
+      {/* Location Picking Crosshair Floating HUD */}
+      {isPickingLocation && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-full bg-amber-500 text-slate-950 font-semibold text-xs shadow-2xl border border-amber-300 backdrop-blur-md">
+          <svg className="w-4 h-4 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="22" y1="12" x2="18" y2="12" />
+            <line x1="6" y1="12" x2="2" y2="12" />
+            <line x1="12" y1="6" x2="12" y2="2" />
+            <line x1="12" y1="22" x2="12" y2="18" />
+          </svg>
+          <span>Crosshair Active: Click anywhere on the 3D map to capture coordinates</span>
+          <button
+            type="button"
+            onClick={() => {
+              setIsPickingLocation(false);
+              setIsAnalyzeOpen(true);
+            }}
+            className="ml-2 px-2.5 py-1 rounded-full bg-slate-950/20 hover:bg-slate-950/30 text-[11px] font-bold"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* ------------------------------------------------------------------ */}
       {/* Deck.gl 3D Geospatial Map Canvas */}
       {/* ------------------------------------------------------------------ */}
@@ -767,6 +859,14 @@ export default function App() {
           layers={layers}
           effects={[lightingEffect]}
           getTooltip={getTooltip}
+          onClick={(info: any) => {
+            if (isPickingLocation && info?.coordinate) {
+              const [lon, lat] = info.coordinate;
+              setPickedCoordinates({ lat, lon });
+              setIsPickingLocation(false);
+              setIsAnalyzeOpen(true);
+            }
+          }}
           style={{ position: "absolute", inset: "0px" }}
         >
           <Map mapStyle={customMapStyle} attributionControl={false} />
@@ -817,6 +917,19 @@ export default function App() {
           onClose={() => setSelectedEventId(null)}
         />
       )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Sample Analyzer & Geolocation Modal */}
+      {/* ------------------------------------------------------------------ */}
+      <SampleAnalyzerModal
+        isOpen={isAnalyzeOpen}
+        onClose={() => setIsAnalyzeOpen(false)}
+        apiBase={API_BASE}
+        isPickingLocation={isPickingLocation}
+        setIsPickingLocation={setIsPickingLocation}
+        pickedCoordinates={pickedCoordinates}
+        onClearPickedCoordinates={() => setPickedCoordinates(null)}
+      />
     </div>
   );
 }

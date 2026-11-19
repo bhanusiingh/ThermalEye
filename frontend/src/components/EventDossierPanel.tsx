@@ -32,9 +32,11 @@ export interface EventProperties {
   nearest_osm_distance_km: number | null;
   land_cover_class: string | null;
   land_cover_confidence: number | null;
+  ml_model_arch?: string | null;
   ml_disclaimer: string | null;
   imagery_rgb_url: string | null;
   imagery_swir_url: string | null;
+  gradcam_url?: string | null;
   sentinel2_scene_id: string | null;
   detection_count: number | null;
   footprint: GeoJSON.Geometry | null;
@@ -595,14 +597,14 @@ export default function EventDossierPanel({ eventId, apiBase, onClose }: EventDo
             ) : null}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {/* True Color RGB Card */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs te-muted">
                 <span>True color (RGB)</span>
                 <span className="te-num">B04 · B03 · B02</span>
               </div>
-              <div className="te-img-frame">
+              <div className="te-img-frame aspect-square">
                 {p.imagery_rgb_url ? (
                   <img
                     src={`${apiBase}${p.imagery_rgb_url}`}
@@ -613,7 +615,7 @@ export default function EventDossierPanel({ eventId, apiBase, onClose }: EventDo
                 ) : (
                   <div className="te-notice is-warn m-3 flex-col items-center justify-center text-center h-[calc(100%-24px)] w-[calc(100%-24px)]">
                     <Icons.AlertTriangle />
-                    <span>Data unavailable — Optical/SWIR chip not acquired</span>
+                    <span>Data Unavailable — Optical chip not acquired</span>
                   </div>
                 )}
               </div>
@@ -622,10 +624,10 @@ export default function EventDossierPanel({ eventId, apiBase, onClose }: EventDo
             {/* SWIR False Color Card */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs te-muted">
-                <span>SWIR thermal penetration</span>
+                <span>SWIR thermal</span>
                 <span className="te-num">B12 · B11 · B8A</span>
               </div>
-              <div className="te-img-frame">
+              <div className="te-img-frame aspect-square">
                 {p.imagery_swir_url ? (
                   <img
                     src={`${apiBase}${p.imagery_swir_url}`}
@@ -636,7 +638,30 @@ export default function EventDossierPanel({ eventId, apiBase, onClose }: EventDo
                 ) : (
                   <div className="te-notice is-warn m-3 flex-col items-center justify-center text-center h-[calc(100%-24px)] w-[calc(100%-24px)]">
                     <Icons.AlertTriangle />
-                    <span>Data unavailable — Optical/SWIR chip not acquired</span>
+                    <span>Data Unavailable — SWIR chip not acquired</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Grad-CAM Attribution Card */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs te-muted">
+                <span>Grad-CAM Attribution</span>
+                <span className="te-num">XAI Saliency</span>
+              </div>
+              <div className="te-img-frame aspect-square">
+                {p.gradcam_url ? (
+                  <img
+                    src={`${apiBase}${p.gradcam_url}`}
+                    alt="Grad-CAM Explainability Saliency Chip"
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="te-notice is-warn m-3 flex-col items-center justify-center text-center h-[calc(100%-24px)] w-[calc(100%-24px)]">
+                    <Icons.AlertTriangle />
+                    <span>Data Unavailable — Grad-CAM overlay not generated</span>
                   </div>
                 )}
               </div>
@@ -645,7 +670,7 @@ export default function EventDossierPanel({ eventId, apiBase, onClose }: EventDo
 
           <div className="te-notice mt-3">
             <Icons.Info />
-            <span>Target chips sampled at 10m Ground Sample Distance (GSD). Cloud exclusion threshold: 20%.</span>
+            <span>Target chips sampled at 10m Ground Sample Distance (GSD) with Grad-CAM CNN explainability overlays.</span>
           </div>
         </section>
 
@@ -669,6 +694,9 @@ export default function EventDossierPanel({ eventId, apiBase, onClose }: EventDo
               <dl className="te-dl">
                 <dt>Predicted terrain class</dt>
                 <dd>{p.land_cover_class}</dd>
+
+                <dt>Model backbone</dt>
+                <dd className="te-num">{p.ml_model_arch || "efficientnet_b0 (6-band)"}</dd>
 
                 <dt>Model confidence</dt>
                 <dd style={{ color: "var(--ok)" }}>

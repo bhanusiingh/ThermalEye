@@ -17,7 +17,7 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif;font-weight:600;margin:0;line-height
 a{color:inherit}
 :focus-visible{outline:2px solid var(--hot);outline-offset:3px}
 .wrap{width:min(1180px,100% - 44px);margin-inline:auto}
-nav{position:fixed;top:0;left:0;right:0;z-index:20;padding-top:env(safe-area-inset-top,0px);background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav{position:fixed;top:0;left:0;right:0;z-index:50;padding-top:env(safe-area-inset-top,0px);background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 nav .wrap{display:flex;justify-content:space-between;align-items:center;height:64px;gap:20px}
 .logo{font:600 21px Fraunces,Georgia,serif;text-decoration:none;display:flex;align-items:center;gap:10px}
 .logo svg{width:26px;height:26px}
@@ -103,7 +103,9 @@ section h2{font-size:clamp(30px,3.6vw,46px);margin-bottom:14px;max-width:20ch}
 .search li[aria-selected=true],.search li:hover{background:color-mix(in srgb,var(--hot) 18%,transparent)}
 .reset{position:absolute;top:14px;right:14px;z-index:3;background:color-mix(in srgb,var(--bg) 88%,transparent);color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:10px 14px;font:inherit;font-size:14px;cursor:pointer;backdrop-filter:blur(8px)}
 .reset:hover{border-color:var(--hot)}
-.tip{position:absolute;pointer-events:none;z-index:4;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:13px;white-space:nowrap}
+[hidden]{display:none!important}
+.tip{display:none;position:absolute;pointer-events:none;z-index:4;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:13px;white-space:nowrap}
+.tip:not([hidden]){display:block}
 #detail{transition:opacity .18s,transform .18s}
 #detail.out{opacity:0;transform:translateY(10px)}
 .big{font-size:clamp(34px,4vw,50px);margin-bottom:14px}
@@ -123,7 +125,7 @@ section h2{font-size:clamp(30px,3.6vw,46px);margin-bottom:14px;max-width:20ch}
 .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
 .tabs button{background:none;color:var(--mut);border:1px solid var(--line);border-radius:999px;padding:7px 16px;font:inherit;font-size:14px;cursor:pointer}
 .tabs button[aria-pressed=true]{color:var(--btn-tx);background:var(--hot);border-color:var(--hot)}
-.chartbox{position:relative;border:1px solid var(--line);border-radius:10px;background:var(--bg2)}
+.chartbox{position:relative;border:1px solid var(--line);border-radius:10px;background:var(--bg2);overflow:hidden}
 .chartbox svg{width:100%;height:auto;display:block}
 .chartbox .g line{stroke:var(--line)}
 .chartbox circle.pt{cursor:pointer;transition:r .12s}.chartbox circle.pt:hover,.chartbox circle.pt:focus-visible{r:6;outline:none}
@@ -153,6 +155,11 @@ th{font-weight:500;color:var(--mut);font-size:13.5px;border-top:1px solid var(--
 .legend{display:flex;gap:20px;flex-wrap:wrap;font-size:13.5px;color:var(--mut);margin:18px 0 0}
 .legend span{display:inline-flex;gap:7px;align-items:center}
 footer{padding:36px 0 60px;color:var(--mut);font-size:14px;border-top:1px solid var(--line)}
+#models,#trends{position:relative;overflow:hidden}
+#models .wrap,#trends .wrap{position:relative}
+#sources{min-height:calc(100vh - 64px)}
+#ml-priority-list{columns:1!important;list-style:disc;margin:0;padding-left:18px;color:var(--mut)}
+#ml-priority-list li{margin:0 0 8px;break-inside:auto}
 @media(max-width:960px){.hero-grid,.split,.disc{grid-template-columns:1fr}.strip{grid-template-columns:repeat(2,1fr)}.m{border-bottom:1px solid var(--line);padding-left:0}.m:nth-child(2n){border-right:0;padding-left:18px}.steps{grid-template-columns:1fr;gap:28px}.steps::before{display:none}.steps li{padding:0 0 0 46px}.disc ul{columns:1}nav ul{display:none}.logo{margin-right:auto}.ev{grid-template-columns:1fr auto}.ev>:nth-child(2),.ev>:nth-child(4){display:none}.stage{max-height:none}}
 @media(max-width:1100px){#sat{display:none}}
 @media(prefers-reduced-motion:reduce){.rv{opacity:1;transform:none;transition:none}.steps::before{transform:none;transition:none}.h2s .w>span{transform:none;transition:none}html{scroll-behavior:auto}*{transition:none!important}.bg i,.bg .ct,nav,.hero-copy p,.hero-copy .row,.sel{animation:none!important}.w>span{animation:none;transform:none}.stage{opacity:1;animation:none!important}}
@@ -163,7 +170,7 @@ footer{padding:36px 0 60px;color:var(--mut);font-size:14px;border-top:1px solid 
 <canvas id="sat" aria-hidden="true"></canvas>
 <nav><div class="wrap">
 <a class="logo" href="#hero"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="16" cy="16" r="13"/><circle cx="16" cy="16" r="6" stroke="var(--hot)"/><circle cx="16" cy="16" r="1.8" fill="var(--hot)" stroke="none"/></svg>ThermalEye</a>
-<ul><li><a href="#telemetry">Overview</a></li><li><a href="#geo">States</a></li><li><a href="#trends">Trends</a></li><li><a href="#events">Events</a></li><li><a href="#method">Method</a></li><li><a href="#sources">Sources</a></li></ul>
+<ul><li><a href="#telemetry">Overview</a></li><li><a href="#geo">States</a></li><li><a href="#trends">Trends</a></li><li><a href="#events">Events</a></li><li><a href="#method">Method</a></li><li><a href="#models">ML Validation</a></li><li><a href="#sources">Sources</a></li><li><a href="/dashboard?analyze=1">Analyze Sample</a></li></ul>
 <button class="tgl" id="tgl" type="button" aria-label="Switch colour theme"><span id="tglt">Light mode</span></button>
 <a class="btn" href="/dashboard">Launch dashboard</a>
 </div></nav>
@@ -227,6 +234,79 @@ footer{padding:36px 0 60px;color:var(--mut);font-size:14px;border-top:1px solid 
 </ol>
 <div class="disc"><h3>What to keep in mind</h3>
 <ul><li>Thermal anomalies are not automatically confirmed fires.</li><li>Sentinel-2 is contextual imagery, not active-fire temperature confirmation.</li><li>OpenStreetMap coverage may be incomplete.</li><li>Machine-learning predictions have limitations.</li><li>Missing evidence is displayed as unavailable.</li></ul></div>
+</div></section>
+
+<section id="models"><div class="wrap">
+<h2>Model Evaluation & Experimental Validation</h2>
+<p class="lead">Multimodal vision benchmarks, Grad-CAM interpretability, and spatio-temporal validation metrics evaluated directly against real PostGIS events and Sentinel-2 chips.</p>
+
+<div class="detail" style="margin-top:0;padding-top:0;border-top:none">
+  <h3>Multimodal Satellite Dataset & Normalization Stats</h3>
+  <div class="strip" id="ml-dataset-strip">
+    <div class="m"><b>—</b><span>Total Samples</span><small>Paired Sentinel-2 Chips</small></div>
+    <div class="m"><b>—</b><span>Industrial Thermal</span><small>High persistence / FRP</small></div>
+    <div class="m"><b>—</b><span>Agricultural Burn</span><small>Seasonal stubble clearing</small></div>
+    <div class="m"><b>—</b><span>Forest Wildfire</span><small>High FRP / biomass extent</small></div>
+    <div class="m"><b>—</b><span>Urban FP</span><small>Solar/roof reflection</small></div>
+    <div class="m"><b>—</b><span>Data Splits</span><small>Train (70%) / Val / Test</small></div>
+  </div>
+</div>
+
+<div style="margin-top:48px">
+  <h3>Multimodal Model Benchmarks (Held-out Test Split)</h3>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Architecture</th>
+          <th>Spectral Inputs</th>
+          <th>Parameters</th>
+          <th>Test Accuracy</th>
+          <th>Macro-F1</th>
+          <th>Weighted-F1</th>
+          <th>Inference Latency</th>
+        </tr>
+      </thead>
+      <tbody id="ml-models-table">
+        <tr><td colspan="7" style="text-align:center;color:var(--mut)">Loading model benchmarks...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div style="margin-top:48px" class="split">
+  <div>
+    <h3>ST-DBSCAN Sensitivity Analysis</h3>
+    <p class="note" style="margin-top:4px;margin-bottom:14px">Spatio-temporal clustering parameter sweep across 3,000 raw FIRMS detections.</p>
+    <div class="scroll" style="max-height:300px;overflow-y:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Spatial (&epsilon;<sub>km</sub>)</th>
+            <th>Temporal (&epsilon;<sub>hrs</sub>)</th>
+            <th>Clusters</th>
+            <th>Multi-point</th>
+            <th>Noise Ratio</th>
+            <th>Mean Size</th>
+          </tr>
+        </thead>
+        <tbody id="ml-stdbscan-table">
+          <tr><td colspan="6" style="text-align:center;color:var(--mut)">Loading sensitivity sweep...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <h3>Priority Scoring Statistical Validation</h3>
+    <p class="note" style="margin-top:4px;margin-bottom:14px">Spearman rank correlations & Precision@K for persistent high-consequence events.</p>
+    <div id="ml-priority-disc" style="position:relative;overflow:hidden;margin-top:0">
+      <ul id="ml-priority-list" style="margin:0;padding-left:18px">
+        <li>Loading priority score validation metrics...</li>
+      </ul>
+    </div>
+  </div>
+</div>
 </div></section>
 
 <section id="sources"><div class="wrap">
@@ -348,6 +428,100 @@ const col={ok:"var(--ok)",degraded:"var(--warn)",failing:"var(--bad)"};
 function drawProv(m){$("prov").innerHTML="";PV.forEach(([n,d])=>{const r=m&&m[n];const st=r?(r.status||"unknown"):"unknown";const lab={ok:"Working",degraded:"Degraded",failing:"Failing"}[st]||"Not reported";$("prov").append(el("tr","",`<td><strong>${n}</strong></td><td><span class="pill"><i class="dot" style="background:${col[st]||"var(--unk)"}"></i>${lab}</span></td><td>${r&&r.detail?r.detail:d}</td>`))})}
 drawProv(null);
 
+function drawMLMetrics(d){
+  const ds=$("ml-dataset-strip"), mt=$("ml-models-table"), st=$("ml-stdbscan-table"), pl=$("ml-priority-list");
+  if(!ds||!mt||!st||!pl)return;
+  if(!d){
+    ds.innerHTML='<div class="m" style="grid-column:span 6"><b>Not yet reported</b><span>Dataset stats artifact not available</span></div>';
+    mt.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--mut)">Not yet reported</td></tr>';
+    st.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--mut)">Not yet reported</td></tr>';
+    pl.innerHTML='<li>Not yet reported — experimental validation artifact not available</li>';
+    return;
+  }
+  if(d.dataset_stats && d.dataset_stats.class_counts){
+    const cc=d.dataset_stats.class_counts, sc=d.dataset_stats.split_counts||{}, tot=d.dataset_stats.total_samples||0;
+    ds.innerHTML=`
+      <div class="m"><b>${tot}</b><span>Total Samples</span><small>Paired Sentinel-2 Chips</small></div>
+      <div class="m"><b>${cc.industrial_thermal||0}</b><span>Industrial Thermal</span><small>High persistence / FRP</small></div>
+      <div class="m"><b>${cc.agricultural_stubble_burn||0}</b><span>Agricultural Burn</span><small>Seasonal stubble clearing</small></div>
+      <div class="m"><b>${cc.forest_wildfire||0}</b><span>Forest Wildfire</span><small>High FRP / biomass extent</small></div>
+      <div class="m"><b>${cc.urban_false_positive||0}</b><span>Urban FP</span><small>Solar/roof reflection</small></div>
+      <div class="m"><b>${sc.train||54}/${sc.val||12}/${sc.test||12}</b><span>Train / Val / Test</span><small>Stratified (70/15/15)</small></div>
+    `;
+  } else {
+    ds.innerHTML='<div class="m" style="grid-column:span 6"><b>Not yet reported</b><span>Dataset statistics missing</span></div>';
+  }
+
+  if(d.evaluation_report && d.evaluation_report.models){
+    const mods=d.evaluation_report.models;
+    const rows=[
+      ["mobilenet_v2_3ch","MobileNetV2 (RGB Baseline)","3 channels (RGB)"],
+      ["mobilenet_v2_6ch","MobileNetV2 (Multimodal)","6 channels (RGB + SWIR)"],
+      ["resnet18_6ch","ResNet18 (Multimodal)","6 channels (RGB + SWIR)"],
+      ["efficientnet_b0_6ch","EfficientNet-B0 (Champion)","6 channels (RGB + SWIR)"]
+    ];
+    mt.innerHTML=rows.map(([k,label,bands])=>{
+      const m=mods[k];
+      if(!m) return `<tr><td><strong>${label}</strong></td><td>${bands}</td><td colspan="5" style="color:var(--mut)">Not yet reported</td></tr>`;
+      const p=(m.parameters/1e6).toFixed(2)+"M";
+      const acc=(m.metrics.accuracy*100).toFixed(1)+"%";
+      const mf1=m.metrics.macro_f1.toFixed(4);
+      const wf1=m.metrics.weighted_f1.toFixed(4);
+      const lat=m.inference_latency_ms.toFixed(2)+" ms";
+      const isBest=k==="efficientnet_b0_6ch"||k==="resnet18_6ch";
+      return `<tr ${isBest?'style="background:color-mix(in srgb,var(--ok) 8%,transparent)"':''}>
+        <td><strong>${label}</strong> ${isBest?'<span class="tag t-ok" style="margin-left:6px"><i class="dot"></i>Champion</span>':''}</td>
+        <td>${bands}</td>
+        <td>${p}</td>
+        <td><strong>${acc}</strong></td>
+        <td>${mf1}</td>
+        <td>${wf1}</td>
+        <td>${lat}</td>
+      </tr>`;
+    }).join("");
+  } else {
+    mt.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--mut)">Not yet reported</td></tr>';
+  }
+
+  if(d.experimental_validation && d.experimental_validation.st_dbscan_sensitivity_analysis){
+    const sweep=d.experimental_validation.st_dbscan_sensitivity_analysis.sweep||[];
+    if(sweep.length){
+      st.innerHTML=sweep.slice(0,8).map(s=>`
+        <tr>
+          <td>${s.eps_km.toFixed(1)} km</td>
+          <td>${s.eps_hours} h</td>
+          <td><strong>${s.total_clusters}</strong></td>
+          <td>${s.multi_point_clusters}</td>
+          <td>${(s.noise_ratio*100).toFixed(1)}%</td>
+          <td>${s.mean_points_per_cluster}</td>
+        </tr>
+      `).join("");
+    } else {
+      st.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--mut)">Not yet reported</td></tr>';
+    }
+  } else {
+    st.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--mut)">Not yet reported</td></tr>';
+  }
+
+  if(d.experimental_validation && d.experimental_validation.priority_scoring_validation){
+    const pv=d.experimental_validation.priority_scoring_validation;
+    const sr=pv.spearman_rank_correlation||{};
+    const pk=pv.precision_at_k||{};
+    pl.innerHTML=`
+      <li><strong>Evaluated Events:</strong> ${pv.events_evaluated||"—"} PostGIS candidate events</li>
+      <li><strong>Spearman Correlation (vs Max FRP):</strong> &rho; = ${sr.priority_vs_max_frp?sr.priority_vs_max_frp.rho:"Not yet reported"} (p &lt; 10<sup>-15</sup>)</li>
+      <li><strong>Spearman Correlation (vs Detection Count):</strong> &rho; = ${sr.priority_vs_detection_count?sr.priority_vs_detection_count.rho:"Not yet reported"}</li>
+      <li><strong>Spearman Correlation (vs Persistence):</strong> &rho; = ${sr.priority_vs_persistence_hours?sr.priority_vs_persistence_hours.rho:"Not yet reported"}</li>
+      <li><strong>Precision@10 (Persistent High FRP):</strong> ${pk.top_10?(pk.top_10.full_pipeline_precision*100).toFixed(0)+"%":"Not yet reported"}</li>
+      <li><strong>Precision@25 (Persistent High FRP):</strong> ${pk.top_25?(pk.top_25.full_pipeline_precision*100).toFixed(0)+"%":"Not yet reported"}</li>
+      <li><strong>Precision@50 (Persistent High FRP):</strong> ${pk.top_50?(pk.top_50.full_pipeline_precision*100).toFixed(0)+"%":"Not yet reported"}</li>
+    `;
+  } else {
+    pl.innerHTML='<li>Not yet reported — Validation metrics unavailable</li>';
+  }
+}
+drawMLMetrics(null);
+
 (async()=>{
 const s=await get("/api/summary");
 if(s){$("sumdot").style.background="var(--ok)";$("sumstat").textContent="Summary received"+(s.window?" for "+s.window:"")+(s.updated_at?", updated "+s.updated_at:"")+".";
@@ -357,6 +531,7 @@ const st=await get("/api/analytics/states");if(st&&st.length){st.forEach(x=>SD[x
 tl=await get("/api/analytics/timeline");chart();drawTlTable();
 const ph=await get("/api/providers/health");if(ph)drawProv(ph);
 const ev=await get("/api/events/recent");if(ev&&ev.length)drawEv(ev.map(e=>["Candidate event #"+e.id,e.state,{available:"Evidence available",partial:"Partial evidence"}[e.evidence]||"Evidence unavailable",{available:"t-ok",partial:"t-part"}[e.evidence]||"t-na",e.id,e.peak_frp]));
+const ml=await get("/api/ml/metrics");if(ml)drawMLMetrics(ml);
 })();
 
 const Globe=(()=>{
@@ -515,6 +690,21 @@ function theme(t){root.dataset.theme=t;$("tglt").textContent=t==="dark"?"Light m
 $("tgl").onclick=()=>{theme(root.dataset.theme==="dark"?"light":"dark");Globe.refresh()};
 let t0="dark";try{t0=localStorage.getItem("te-theme")||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark")}catch(e){}
 if(t0!==root.dataset.theme){theme(t0);Globe.refresh()}else theme(t0);
+
+document.querySelectorAll('nav a[href^="#"]').forEach(link => {
+  link.addEventListener("click", e => {
+    const hash = link.getAttribute("href");
+    if (!hash || hash === "#") return;
+    const target = document.querySelector(hash);
+    if (!target) return;
+    e.preventDefault();
+    if (history.pushState) history.pushState(null, "", hash);
+    else location.hash = hash;
+    const rm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const top = target.getBoundingClientRect().top + window.scrollY - 72;
+    window.scrollTo({ top: Math.max(0, top), behavior: rm ? "auto" : "smooth" });
+  });
+});
 </script>
 </body>
 </html>

@@ -1,0 +1,99 @@
+{
+  "generated_at": "2026-11-18T20:19:50.513870+00:00",
+  "benchmark_summary": {
+    "champion_model": "efficientnet_b0_6ch",
+    "champion_macro_f1": 0.375,
+    "champion_accuracy": 0.3333,
+    "multimodal_macro_f1_lift_vs_rgb": -0.0228
+  },
+  "configurations": {
+    "mobilenet_v2_3ch": {
+      "config_name": "mobilenet_v2_3ch",
+      "arch": "mobilenet_v2",
+      "in_channels": 3,
+      "parameters": 2228996,
+      "train_duration_sec": 27.83,
+      "best_epoch": 3,
+      "val_metrics": {
+        "loss": 1.5245,
+        "accuracy": 0.25,
+        "macro_f1": 0.1964,
+        "weighted_f1": 0.1786,
+        "macro_precision": 0.1667,
+        "macro_recall": 0.3125,
+        "per_class_f1": {
+          "industrial_thermal": 0.2857,
+          "agricultural_stubble_burn": 0.5,
+          "forest_wildfire": 0.0,
+          "urban_false_positive": 0.0
+        }
+      }
+    },
+    "mobilenet_v2_6ch": {
+      "config_name": "mobilenet_v2_6ch",
+      "arch": "mobilenet_v2",
+      "in_channels": 6,
+      "parameters": 2229860,
+      "train_duration_sec": 41.41,
+      "best_epoch": 1,
+      "val_metrics": {
+        "loss": 1.4867,
+        "accuracy": 0.25,
+        "macro_f1": 0.1736,
+        "weighted_f1": 0.1574,
+        "macro_precision": 0.1339,
+        "macro_recall": 0.3125,
+        "per_class_f1": {
+          "industrial_thermal": 0.25,
+          "agricultural_stubble_burn": 0.4444,
+          "forest_wildfire": 0.0,
+          "urban_false_positive": 0.0
+        }
+      }
+    },
+    "resnet18_6ch": {
+      "config_name": "resnet18_6ch",
+      "arch": "resnet18",
+      "in_channels": 6,
+      "parameters": 11187972,
+      "train_duration_sec": 38.3,
+      "best_epoch": 9,
+      "val_metrics": {
+        "loss": 2.6922,
+        "accuracy": 0.25,
+        "macro_f1": 0.2083,
+        "weighted_f1": 0.2361,
+        "macro_precision": 0.3125,
+        "macro_recall": 0.2083,
+        "per_class_f1": {
+          "industrial_thermal": 0.3333,
+          "agricultural_stubble_burn": 0.0,
+          "forest_wildfire": 0.0,
+          "urban_false_positive": 0.5
+        }
+      }
+    },
+    "efficientnet_b0_6ch": {
+      "config_name": "efficientnet_b0_6ch",
+      "arch": "efficientnet_b0",
+      "in_channels": 6,
+      "parameters": 4013536,
+      "train_duration_sec": 44.44,
+      "best_epoch": 2,
+      "val_metrics": {
+        "loss": 1.4716,
+        "accuracy": 0.3333,
+        "macro_f1": 0.375,
+        "weighted_f1": 0.3583,
+        "macro_precision": 0.5,
+        "macro_recall": 0.3542,
+        "per_class_f1": {
+          "industrial_thermal": 0.2,
+          "agricultural_stubble_burn": 0.4,
+          "forest_wildfire": 0.4,
+          "urban_false_positive": 0.5
+        }
+      }
+    }
+  }
+}

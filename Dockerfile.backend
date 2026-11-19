@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ===========================================================================
 # ThermalEye — Backend & Worker Production Dockerfile
 # ===========================================================================
@@ -23,7 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python requirements
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision && \
+    grep -vE '^(torch|torchvision)' requirements.txt > /tmp/req_no_torch.txt && \
+    pip install -r /tmp/req_no_torch.txt
 
 # Create static imagery and data directories
 RUN mkdir -p /app/static/imagery /app/data
@@ -31,8 +35,9 @@ RUN mkdir -p /app/static/imagery /app/data
 # Copy application scripts
 COPY main.py run_pipeline.py ingest_firms.py cluster_events.py enrich_osm_and_score.py fetch_imagery.py classify_landcover.py ./
 
-# Copy bundled geospatial reference data
+# Copy bundled geospatial reference data and ML package
 COPY data/ ./data/
+COPY ml/ ./ml/
 
 EXPOSE 8000
 

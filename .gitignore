@@ -137,3 +137,8 @@ desktop.ini
 .gemini/
 .claude/
 .cursor/
+
+*.osm.pbf
+static/uploads/
+
+models/*.pt

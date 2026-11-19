@@ -117,7 +117,9 @@ CREATE TABLE IF NOT EXISTS candidate_events (
     -- Phase 4: Imagery & ML Land-Cover Columns
     imagery_rgb_path        TEXT,
     imagery_swir_path       TEXT,
+    gradcam_path            TEXT,
     land_cover_confidence   DOUBLE PRECISION,
+    ml_model_arch           TEXT,
     ml_disclaimer           TEXT,
     sentinel2_scene_id      TEXT,
     imagery_fetched_at      TIMESTAMPTZ,
@@ -307,3 +309,23 @@ BEGIN
     END IF;
 END
 $$;
+
+
+-- ==============================================
+-- 7. Local OpenStreetMap Industrial Features Index
+--    Extracted from Geofabrik India OSM PBF.
+-- ==============================================
+CREATE TABLE IF NOT EXISTS osm_industrial_features (
+    osm_id      TEXT PRIMARY KEY,
+    name        TEXT,
+    category    TEXT NOT NULL,
+    osm_type    TEXT NOT NULL,
+    geom        GEOMETRY(Point, 4326) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_osm_industrial_geom
+    ON osm_industrial_features USING GIST (geom);
+
+CREATE INDEX IF NOT EXISTS idx_osm_industrial_geog
+    ON osm_industrial_features USING GIST ((geom::geography));
+

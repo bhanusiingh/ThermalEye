@@ -1,0 +1,67 @@
+{
+  "generated_at": "2026-11-18T20:13:03.910116+00:00",
+  "total_samples": 78,
+  "domain_classes": [
+    "industrial_thermal",
+    "agricultural_stubble_burn",
+    "forest_wildfire",
+    "urban_false_positive"
+  ],
+  "class_counts": {
+    "industrial_thermal": 29,
+    "agricultural_stubble_burn": 18,
+    "urban_false_positive": 16,
+    "forest_wildfire": 15
+  },
+  "split_counts": {
+    "train": 54,
+    "test": 12,
+    "val": 12
+  },
+  "split_class_distribution": {
+    "train": {
+      "industrial_thermal": 20,
+      "agricultural_stubble_burn": 13,
+      "urban_false_positive": 11,
+      "forest_wildfire": 10
+    },
+    "val": {
+      "industrial_thermal": 4,
+      "forest_wildfire": 3,
+      "urban_false_positive": 3,
+      "agricultural_stubble_burn": 2
+    },
+    "test": {
+      "industrial_thermal": 5,
+      "agricultural_stubble_burn": 3,
+      "forest_wildfire": 2,
+      "urban_false_positive": 2
+    }
+  },
+  "channel_stats": {
+    "bands": [
+      "B04 (Red)",
+      "B03 (Green)",
+      "B02 (Blue)",
+      "B12 (SWIR2)",
+      "B11 (SWIR1)",
+      "B8A (NIR)"
+    ],
+    "mean": [
+      0.2786,
+      0.24513,
+      0.16569,
+      0.38223,
+      0.54808,
+      0.62328
+    ],
+    "std": [
+      0.18989,
+      0.13332,
+      0.10784,
+      0.23287,
+      0.27255,
+      0.27403
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-# ThermalEye — Python Dependencies (Phase 1-3)
+# ThermalEye — Python Dependencies (Phase 1-4 & ML Package)
 
 # Phase 1: Ingestion
 requests>=2.31,<3
@@ -11,15 +11,21 @@ python-dotenv>=1.0,<2
 tenacity>=8.2,<10
 shapely>=2.0,<3
 
-# Phase 2: Spatial Clustering
+# Phase 2: Spatial Clustering & Local OSM Indexing
 scikit-learn>=1.4,<2
+osmium>=3.7.0
 
 # Phase 3: API
 fastapi>=0.115,<1
 uvicorn[standard]>=0.32,<1
+python-multipart>=0.0.9
 asyncpg>=0.30,<1
 
-# Phase 4: Sentinel-2 Retrieval & ML Land-Cover
+# Phase 4 & ML Pipeline: Sentinel-2 Retrieval, Fine-Tuning & Computer Vision
 transformers>=4.40,<5
 torch>=2.0,<3
-pillow>=10.0,<11
+torchvision>=0.15,<1
+scikit-learn>=1.4,<2
+matplotlib>=3.8,<4
+Pillow>=10.0,<12
+numpy>=1.25,<3
