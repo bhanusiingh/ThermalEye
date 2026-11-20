@@ -54,24 +54,29 @@ load_dotenv(dotenv_path=os.path.join(_script_dir, ".env"))
 
 
 def get_database_url() -> str:
-    url = os.environ.get(
-        "DATABASE_URL",
-        "postgresql://thermaleye:thermaleye_secret@localhost:5432/thermaleye",
-    )
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
+    raw_url = os.environ.get("DATABASE_URL", "").strip()
+    if not raw_url:
+        db_host = os.environ.get("DB_HOST", "localhost")
+        db_port = os.environ.get("DB_PORT", "5432")
+        db_name = os.environ.get("DB_NAME", "thermaleye")
+        db_user = os.environ.get("DB_USER", "thermaleye")
+        db_pass = os.environ.get("DB_PASSWORD", "thermaleye_secret")
+        raw_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
 
-    if "+" not in url.split("://")[0]:
+    if raw_url.startswith("postgres://"):
+        raw_url = raw_url.replace("postgres://", "postgresql://", 1)
+
+    if "+" not in raw_url.split("://")[0]:
         try:
             import psycopg2
-            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            raw_url = raw_url.replace("postgresql://", "postgresql+psycopg2://", 1)
         except ImportError:
             try:
                 import psycopg
-                url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+                raw_url = raw_url.replace("postgresql://", "postgresql+psycopg://", 1)
             except ImportError:
                 pass
-    return url
+    return raw_url
 
 
 DATABASE_URL: str = get_database_url()
@@ -130,11 +135,24 @@ def get_fine_tuned_model() -> Optional[Dict[str, Any]]:
         return _pytorch_model_bundle
 
     if not CHAMPION_MODEL_PATH.exists():
+        model_url = os.getenv("MODEL_URL", "").strip()
+        if model_url:
+            logger.info("Champion model checkpoint not found at %s. Downloading from MODEL_URL...", CHAMPION_MODEL_PATH)
+            try:
+                import urllib.request
+                CHAMPION_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+                urllib.request.urlretrieve(model_url, str(CHAMPION_MODEL_PATH))
+                logger.info("Successfully downloaded champion checkpoint from MODEL_URL.")
+            except Exception as e:
+                logger.warning("Failed downloading champion model from %s: %s", model_url, e)
+
+    if not CHAMPION_MODEL_PATH.exists():
         logger.warning("Champion model checkpoint not found at %s. Falling back.", CHAMPION_MODEL_PATH)
         return None
 
     try:
         import torch
+        torch.set_num_threads(1)
         from ml.models import build_model
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

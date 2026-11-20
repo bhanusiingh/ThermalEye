@@ -878,6 +878,52 @@ class TestAnalyticsEndpoints(unittest.TestCase):
         if os.path.isfile(gradcam_disk_path):
             os.remove(gradcam_disk_path)
 
+    # ------------------------------------------------------------------
+    # 13. Single-Container Cloud Frontend Serving & Database DSN Resolution
+    # ------------------------------------------------------------------
+    def test_serve_frontend_index_and_dashboard(self):
+        """Verify GET / and GET /dashboard serve production frontend HTML bundles."""
+        resp_index = self.client.get("/")
+        self.assertEqual(resp_index.status_code, 200)
+        self.assertIn("text/html", resp_index.headers.get("content-type", ""))
+        self.assertIn("ThermalEye", resp_index.text)
+
+        resp_dash = self.client.get("/dashboard")
+        self.assertEqual(resp_dash.status_code, 200)
+        self.assertIn("text/html", resp_dash.headers.get("content-type", ""))
+
+    def test_resolve_database_url_preserves_neon_ssl_and_fallbacks(self):
+        """Verify resolve_database_url preserves Neon SSL query parameters and falls back to DB_*."""
+        orig_db_url = os.environ.get("DATABASE_URL")
+        try:
+            # 1. Neon postgres URL with query params
+            os.environ["DATABASE_URL"] = (
+                "postgres://neon_user:neon_pass@ep-cool-fog.ap-southeast-1.aws.neon.tech/neondb"
+                "?sslmode=require&channel_binding=require"
+            )
+            neon_resolved = main.resolve_database_url()
+            self.assertTrue(neon_resolved.startswith("postgresql://"))
+            self.assertIn("sslmode=require", neon_resolved)
+            self.assertIn("channel_binding=require", neon_resolved)
+
+            # 2. Fallback to DB_* vars
+            del os.environ["DATABASE_URL"]
+            os.environ["DB_HOST"] = "custom-pg-host"
+            os.environ["DB_PORT"] = "5433"
+            os.environ["DB_NAME"] = "custom_db"
+            os.environ["DB_USER"] = "custom_user"
+            os.environ["DB_PASSWORD"] = "custom_pass"
+            fallback_resolved = main.resolve_database_url()
+            self.assertEqual(
+                fallback_resolved,
+                "postgresql://custom_user:custom_pass@custom-pg-host:5433/custom_db",
+            )
+        finally:
+            if orig_db_url is not None:
+                os.environ["DATABASE_URL"] = orig_db_url
+            for k in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"):
+                os.environ.pop(k, None)
+
 
 if __name__ == "__main__":
     unittest.main()
