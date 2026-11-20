@@ -2,9 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { Map } from "react-map-gl/maplibre";
 import DeckGL from "@deck.gl/react";
-import { GeoJsonLayer } from "@deck.gl/layers";
-import { ColumnLayer } from "@deck.gl/layers";
-import { LightingEffect, AmbientLight, DirectionalLight } from "@deck.gl/core";
+import { GeoJsonLayer, ColumnLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { LightingEffect, AmbientLight, DirectionalLight, FlyToInterpolator } from "@deck.gl/core";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./index.css";
 import EventDossierPanel from "./components/EventDossierPanel";
@@ -317,6 +316,90 @@ export default function App() {
   const [isAnalyzeOpen, setIsAnalyzeOpen] = useState(false);
   const [isPickingLocation, setIsPickingLocation] = useState(false);
   const [pickedCoordinates, setPickedCoordinates] = useState<{ lat: number; lon: number } | null>(null);
+  const [pulseProgress, setPulseProgress] = useState(0);
+
+  // ---- Selected Event Geometry Resolution ----------------------------------
+  const selectedEvent = useMemo(() => {
+    if (!selectedEventId || !eventsData?.features) return null;
+    const match = eventsData.features.find((f) => f.properties.id === selectedEventId);
+    if (!match) return null;
+    let lon = 0;
+    let lat = 0;
+    if (match.geometry?.type === "Point") {
+      [lon, lat] = match.geometry.coordinates;
+    } else if (match.properties.footprint?.type === "Polygon") {
+      const ring = (match.properties.footprint as any).coordinates[0];
+      lon = ring.reduce((s: number, p: number[]) => s + p[0], 0) / ring.length;
+      lat = ring.reduce((s: number, p: number[]) => s + p[1], 0) / ring.length;
+    } else {
+      return null;
+    }
+    return {
+      id: match.properties.id,
+      longitude: lon,
+      latitude: lat,
+      frp: match.properties.max_frp,
+      priorityScore: match.properties.priority_score,
+    };
+  }, [selectedEventId, eventsData]);
+
+  // ---- Smooth Camera Pan (Locate & Select) ---------------------------------
+  const focusOnEvent = useCallback(
+    (event: { longitude: number; latitude: number } | null) => {
+      if (!event) return;
+      const prefersReducedMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      setViewState((prev: any) => {
+        const targetZoom = Math.max(prev.zoom || 4.5, 7.5);
+        // Slightly offset center eastward on desktop so event is not obscured by the right drawer
+        const isDesktop = typeof window !== "undefined" && window.innerWidth >= 900;
+        const lonOffset = isDesktop ? (200 * 360) / (256 * Math.pow(2, targetZoom)) : 0;
+        const latOffset = !isDesktop ? (-100 * 180) / (256 * Math.pow(2, targetZoom)) : 0;
+        return {
+          ...prev,
+          longitude: event.longitude + lonOffset,
+          latitude: event.latitude + latOffset,
+          zoom: targetZoom,
+          pitch: 45,
+          transitionDuration: prefersReducedMotion ? 0 : 650,
+          transitionInterpolator: new FlyToInterpolator(),
+        };
+      });
+    },
+    []
+  );
+
+  // ---- Radar Pulse Halo Animation Loop -------------------------------------
+  useEffect(() => {
+    if (!selectedEventId) {
+      setPulseProgress(0);
+      return;
+    }
+    const prefersReduced =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) {
+      setPulseProgress(0.5);
+      return;
+    }
+
+    let animId: number;
+    const duration = 1200; // ms
+    let start: number | null = null;
+
+    const frame = (time: number) => {
+      if (start === null) start = time;
+      const elapsed = time - start;
+      const progress = (elapsed % duration) / duration;
+      setPulseProgress(progress);
+      animId = requestAnimationFrame(frame);
+    };
+
+    animId = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(animId);
+  }, [selectedEventId]);
 
   // ---- Sync Theme Attribute & Persistence ---------------------------------
   useEffect(() => {
@@ -381,15 +464,10 @@ export default function App() {
     const match = eventsData.features.find((f) => f.properties.id === selectedEventId);
     if (match?.geometry?.type === "Point") {
       const [lon, lat] = match.geometry.coordinates;
-      setViewState((prev) => ({
-        ...prev,
-        longitude: lon,
-        latitude: lat,
-        zoom: Math.max(prev.zoom, 8.5),
-      }));
+      focusOnEvent({ longitude: lon, latitude: lat });
       setDeepLinkEventCentered(true);
     }
-  }, [selectedEventId, deepLinkEventCentered, eventsData]);
+  }, [selectedEventId, deepLinkEventCentered, eventsData, focusOnEvent]);
 
   // ---- Fetch Base Basemap Style Once --------------------------------------
   useEffect(() => {
@@ -496,21 +574,30 @@ export default function App() {
   }, [eventsData]);
 
   // ---- Click handler ------------------------------------------------------
-  const handleClick = useCallback((info: any) => {
-    if (isPickingLocation && info?.coordinate) {
-      const [lon, lat] = info.coordinate;
-      setPickedCoordinates({ lat, lon });
-      setIsPickingLocation(false);
-      setIsAnalyzeOpen(true);
-      return;
-    }
-    if (info?.object) {
-      const id = info.object.id ?? info.object.properties?.id;
-      if (id) {
-        setSelectedEventId(id);
+  const handleClick = useCallback(
+    (info: any) => {
+      if (isPickingLocation && info?.coordinate) {
+        const [lon, lat] = info.coordinate;
+        setPickedCoordinates({ lat, lon });
+        setIsPickingLocation(false);
+        setIsAnalyzeOpen(true);
+        return;
       }
-    }
-  }, [isPickingLocation]);
+      if (info?.object) {
+        const id = info.object.id ?? info.object.properties?.id;
+        if (id) {
+          setSelectedEventId(id);
+          const pos = info.object.position;
+          if (pos && Array.isArray(pos) && pos.length >= 2) {
+            focusOnEvent({ longitude: pos[0], latitude: pos[1] });
+          } else if (info.coordinate) {
+            focusOnEvent({ longitude: info.coordinate[0], latitude: info.coordinate[1] });
+          }
+        }
+      }
+    },
+    [isPickingLocation, focusOnEvent]
+  );
 
   // ---- Deck.gl layers -----------------------------------------------------
   const layers = useMemo(() => {
@@ -568,13 +655,20 @@ export default function App() {
           getLineColor: [...pal.emberRgb, 190],
           getFillColor: (f: any) => {
             const score = f.properties?.priority_score;
-            return priorityToColor(score, theme);
+            const base = priorityToColor(score, theme);
+            if (selectedEventId) {
+              if (f.properties?.id === selectedEventId) {
+                return theme === "dark" ? [56, 189, 248, 240] : [2, 132, 199, 240];
+              }
+              return [base[0], base[1], base[2], 95];
+            }
+            return base;
           },
           getLineWidth: 1.5,
           onClick: handleClick,
           updateTriggers: {
             getLineColor: [theme],
-            getFillColor: [footprintData, theme],
+            getFillColor: [footprintData, theme, selectedEventId],
           },
         })
       );
@@ -589,24 +683,130 @@ export default function App() {
           id: "frp-columns",
           data: columnData,
           pickable: true,
+          autoHighlight: true,
+          highlightColor: [248, 250, 252, 180],
           diskResolution: 12,
           radius: 8000,
           extruded: true,
           elevationScale: 200,
           getPosition: (d: any) => d.position,
-          getElevation: (d: any) => ((d.frp || 1) / maxFrp) * 500,
-          getFillColor: (d: any) => priorityToColor(d.priorityScore, theme),
+          getElevation: (d: any) => {
+            const baseHeight = ((d.frp || 1) / maxFrp) * 500;
+            if (selectedEventId && d.id === selectedEventId) {
+              return Math.max(baseHeight * 1.25, 45);
+            }
+            return baseHeight;
+          },
+          getFillColor: (d: any) => {
+            if (selectedEventId) {
+              if (d.id === selectedEventId) {
+                return theme === "dark" ? [56, 189, 248, 255] : [2, 132, 199, 255];
+              }
+              const base = priorityToColor(d.priorityScore, theme);
+              return [base[0], base[1], base[2], 95];
+            }
+            return priorityToColor(d.priorityScore, theme);
+          },
           onClick: handleClick,
           updateTriggers: {
-            getFillColor: [columnData, theme],
-            getElevation: [columnData],
+            getFillColor: [columnData, theme, selectedEventId],
+            getElevation: [columnData, selectedEventId],
+          },
+        })
+      );
+    }
+
+    // 3) Dedicated Selection Target Layers
+    if (selectedEvent) {
+      const prefersReduced =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      // Concentric Ground Target Ring
+      result.push(
+        new ScatterplotLayer({
+          id: "selected-event-ring",
+          data: [selectedEvent],
+          pickable: false,
+          getPosition: (d: any) => [d.longitude, d.latitude],
+          filled: false,
+          stroked: true,
+          lineWidthUnits: "pixels",
+          getLineWidth: 2.5,
+          radiusUnits: "pixels",
+          getRadius: 22,
+          getLineColor: [248, 250, 252, 240],
+          updateTriggers: {
+            getPosition: [selectedEvent.id],
+          },
+        })
+      );
+
+      // Pulsing Radar Halo
+      const pulseRadius = prefersReduced ? 28 : 16 + (44 - 16) * pulseProgress;
+      const pulseAlpha = prefersReduced ? 160 : Math.round(220 * (1 - pulseProgress));
+      result.push(
+        new ScatterplotLayer({
+          id: "selected-event-pulse",
+          data: [selectedEvent],
+          pickable: false,
+          getPosition: (d: any) => [d.longitude, d.latitude],
+          filled: false,
+          stroked: true,
+          lineWidthUnits: "pixels",
+          getLineWidth: 2,
+          radiusUnits: "pixels",
+          getRadius: pulseRadius,
+          getLineColor: [56, 189, 248, pulseAlpha],
+          updateTriggers: {
+            getPosition: [selectedEvent.id],
+            getRadius: [pulseRadius],
+            getLineColor: [pulseAlpha],
+          },
+        })
+      );
+
+      // Persistent Pinned Event Tag
+      result.push(
+        new TextLayer({
+          id: "selected-event-label",
+          data: [selectedEvent],
+          pickable: false,
+          getPosition: (d: any) => [d.longitude, d.latitude],
+          getText: (d: any) => `Event #${String(d.id).substring(0, 8).toUpperCase()}`,
+          sizeUnits: "pixels",
+          getSize: 12,
+          getColor: [248, 250, 252, 255],
+          getPixelOffset: [0, -28],
+          getTextAnchor: "middle",
+          getAlignmentBaseline: "bottom",
+          fontFamily: "Inter, system-ui, sans-serif",
+          fontWeight: 600,
+          background: true,
+          getBackgroundColor: [15, 23, 42, 235],
+          backgroundBorderRadius: 6,
+          backgroundPadding: [8, 4, 8, 4],
+          getBorderColor: [56, 189, 248, 255],
+          getBorderWidth: 1.5,
+          updateTriggers: {
+            getPosition: [selectedEvent.id],
+            getText: [selectedEvent.id],
           },
         })
       );
     }
 
     return result;
-  }, [columnData, footprintData, handleClick, indiaBoundary, theme]);
+  }, [
+    columnData,
+    footprintData,
+    handleClick,
+    indiaBoundary,
+    theme,
+    selectedEventId,
+    selectedEvent,
+    pulseProgress,
+  ]);
 
   // ---- Tooltip ------------------------------------------------------------
   const getTooltip = useCallback((info: any) => {
@@ -859,6 +1059,9 @@ export default function App() {
           layers={layers}
           effects={[lightingEffect]}
           getTooltip={getTooltip}
+          getCursor={({ isHovering, isDragging }: any) =>
+            isDragging ? "grabbing" : isHovering ? "pointer" : "grab"
+          }
           onClick={(info: any) => {
             if (isPickingLocation && info?.coordinate) {
               const [lon, lat] = info.coordinate;
@@ -915,6 +1118,7 @@ export default function App() {
           eventId={selectedEventId}
           apiBase={API_BASE}
           onClose={() => setSelectedEventId(null)}
+          onFocusEvent={() => selectedEvent && focusOnEvent(selectedEvent)}
         />
       )}
 

@@ -61,6 +61,7 @@ interface EventDossierPanelProps {
   eventId: string;
   apiBase: string;
   onClose: () => void;
+  onFocusEvent?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +235,12 @@ function getThreatClassification(score: number | null): {
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
-export default function EventDossierPanel({ eventId, apiBase, onClose }: EventDossierPanelProps) {
+export default function EventDossierPanel({
+  eventId,
+  apiBase,
+  onClose,
+  onFocusEvent,
+}: EventDossierPanelProps) {
   const [dossier, setDossier] = useState<EventDossier | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -417,18 +423,55 @@ export default function EventDossierPanel({ eventId, apiBase, onClose }: EventDo
               >
                 {copiedId ? <Icons.Check /> : <Icons.Copy />}
               </button>
+              {onFocusEvent && (
+                <button
+                  type="button"
+                  onClick={onFocusEvent}
+                  title="Center map on this event"
+                  aria-label="Center map on this event"
+                  className="te-icon-btn"
+                  style={{ padding: "3px", borderColor: "transparent" }}
+                >
+                  <Icons.Crosshair />
+                </button>
+              )}
             </div>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close dossier"
-          className="te-icon-btn"
-        >
-          <Icons.Cross />
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <div
+            className="te-pill hidden sm:inline-flex"
+            style={{
+              background: "color-mix(in srgb, var(--cool) 12%, var(--bg2))",
+              borderColor: "color-mix(in srgb, var(--cool) 35%, var(--line))",
+              color: "var(--cool)",
+              fontSize: "11px",
+              padding: "2px 8px",
+            }}
+          >
+            <span
+              className="te-dot"
+              style={{
+                width: "7px",
+                height: "7px",
+                background: "#38bdf8",
+                boxShadow: "0 0 8px #38bdf8",
+                animation: "tePulse 1.5s ease-in-out infinite",
+              }}
+            />
+            <span>Selected on map</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close dossier"
+            className="te-icon-btn"
+          >
+            <Icons.Cross />
+          </button>
+        </div>
       </header>
 
       {/* ------------------------------------------------------------------ */}
