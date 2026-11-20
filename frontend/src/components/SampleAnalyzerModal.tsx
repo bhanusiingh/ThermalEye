@@ -46,39 +46,59 @@ interface SampleAnalyzerModalProps {
   isOpen: boolean;
   onClose: () => void;
   apiBase: string;
+  theme?: "dark" | "light";
   isPickingLocation: boolean;
   setIsPickingLocation: (val: boolean) => void;
   pickedCoordinates: { lat: number; lon: number } | null;
   onClearPickedCoordinates: () => void;
 }
 
-const CLASS_CONFIG: Record<
-  string,
-  { label: string; color: string; badgeClass: string; barClass: string }
-> = {
+interface ClassStyle {
+  label: string;
+  colorDark: string;
+  colorLight: string;
+  badgeDark: { bg: string; border: string; text: string };
+  badgeLight: { bg: string; border: string; text: string };
+  barDark: string;
+  barLight: string;
+}
+
+const CLASS_CONFIG: Record<string, ClassStyle> = {
   industrial_thermal: {
     label: "Industrial Thermal",
-    color: "#e0a458",
-    badgeClass: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-    barClass: "bg-amber-500",
+    colorDark: "#e5a246",
+    colorLight: "#b86f1c",
+    badgeDark: { bg: "rgba(224, 164, 88, 0.15)", border: "rgba(224, 164, 88, 0.4)", text: "#e5a246" },
+    badgeLight: { bg: "rgba(184, 111, 28, 0.12)", border: "rgba(184, 111, 28, 0.35)", text: "#b86f1c" },
+    barDark: "#e5a246",
+    barLight: "#b86f1c",
   },
   agricultural_stubble_burn: {
     label: "Agricultural Burn",
-    color: "#e67e22",
-    badgeClass: "border-orange-500/40 bg-orange-500/10 text-orange-300",
-    barClass: "bg-orange-500",
+    colorDark: "#f39c12",
+    colorLight: "#ca621a",
+    badgeDark: { bg: "rgba(230, 126, 34, 0.15)", border: "rgba(230, 126, 34, 0.4)", text: "#f39c12" },
+    badgeLight: { bg: "rgba(202, 98, 26, 0.12)", border: "rgba(202, 98, 26, 0.35)", text: "#ca621a" },
+    barDark: "#f39c12",
+    barLight: "#ca621a",
   },
   forest_wildfire: {
     label: "Forest Wildfire",
-    color: "#d0694c",
-    badgeClass: "border-rose-500/40 bg-rose-500/10 text-rose-300",
-    barClass: "bg-rose-500",
+    colorDark: "#e74c3c",
+    colorLight: "#ad4f37",
+    badgeDark: { bg: "rgba(208, 105, 76, 0.15)", border: "rgba(208, 105, 76, 0.4)", text: "#e74c3c" },
+    badgeLight: { bg: "rgba(173, 79, 55, 0.12)", border: "rgba(173, 79, 55, 0.35)", text: "#ad4f37" },
+    barDark: "#e74c3c",
+    barLight: "#ad4f37",
   },
   urban_false_positive: {
     label: "Urban False Positive",
-    color: "#74a9ae",
-    badgeClass: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300",
-    barClass: "bg-cyan-500",
+    colorDark: "#74a9ae",
+    colorLight: "#2b6e72",
+    badgeDark: { bg: "rgba(116, 169, 174, 0.15)", border: "rgba(116, 169, 174, 0.4)", text: "#74a9ae" },
+    badgeLight: { bg: "rgba(43, 110, 114, 0.12)", border: "rgba(43, 110, 114, 0.35)", text: "#2b6e72" },
+    barDark: "#74a9ae",
+    barLight: "#2b6e72",
   },
 };
 
@@ -86,11 +106,14 @@ export default function SampleAnalyzerModal({
   isOpen,
   onClose,
   apiBase,
+  theme = "dark",
   isPickingLocation,
   setIsPickingLocation,
   pickedCoordinates,
   onClearPickedCoordinates,
 }: SampleAnalyzerModalProps) {
+  const isDark = theme !== "light";
+
   // Input states
   const [rgbFile, setRgbFile] = useState<File | null>(null);
   const [rgbPreview, setRgbPreview] = useState<string | null>(null);
@@ -161,7 +184,9 @@ export default function SampleAnalyzerModal({
           const res = await fetch(rgbUrl);
           if (res.ok) {
             const blob = await res.blob();
-            const file = new File([blob], filename || "preset_rgb.png", { type: blob.type || "image/png" });
+            const file = new File([blob], filename || "preset_rgb.png", {
+              type: blob.type || "image/png",
+            });
             setRgbFile(file);
             setRgbPreview(URL.createObjectURL(blob));
           }
@@ -178,7 +203,9 @@ export default function SampleAnalyzerModal({
           const res = await fetch(swirUrl);
           if (res.ok) {
             const blob = await res.blob();
-            const file = new File([blob], filename || "preset_swir.png", { type: blob.type || "image/png" });
+            const file = new File([blob], filename || "preset_swir.png", {
+              type: blob.type || "image/png",
+            });
             setSwirFile(file);
             setSwirPreview(URL.createObjectURL(blob));
           }
@@ -272,38 +299,40 @@ export default function SampleAnalyzerModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 overflow-y-auto bg-slate-950/75 backdrop-blur-md"
+      className="sam-backdrop"
+      data-theme={theme}
       role="dialog"
       aria-modal="true"
       aria-labelledby="sample-analyzer-title"
     >
-      <div className="relative w-full max-w-5xl my-auto rounded-2xl bg-slate-950/90 backdrop-blur-xl border border-slate-800 text-slate-100 shadow-2xl overflow-hidden transition-all">
+      <div className="sam-dialog">
         {/* Header Bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-slate-900/50">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className="sam-header">
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <div className="sam-header-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                 <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
                 <line x1="12" y1="22.08" x2="12" y2="12" />
               </svg>
             </div>
             <div>
-              <h2 id="sample-analyzer-title" className="text-lg font-semibold tracking-tight text-slate-100">
-                Sample Analyzer & Geolocation
+              <h2 id="sample-analyzer-title" className="sam-title">
+                Sample Analyzer &amp; Geolocation
               </h2>
-              <p className="text-xs text-slate-400">
-                On-demand 6-channel satellite classification, sovereign demarcation & Grad-CAM attribution
+              <p className="sam-sub">
+                On-demand 6-channel satellite classification, sovereign demarcation &amp; Grad-CAM attribution
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             {result && (
               <button
                 type="button"
                 onClick={handleReset}
-                className="px-2.5 py-1 text-xs font-medium rounded-lg text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700 transition-colors"
+                className="sam-btn-cancel"
+                style={{ height: "32px", padding: "0 0.75rem", fontSize: "0.75rem" }}
               >
                 Reset Form
               </button>
@@ -311,10 +340,11 @@ export default function SampleAnalyzerModal({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent hover:border-slate-700/80 transition-colors"
+              className="sam-btn-cancel"
+              style={{ height: "32px", width: "32px", padding: 0 }}
               aria-label="Close modal"
             >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -323,21 +353,42 @@ export default function SampleAnalyzerModal({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 max-h-[82vh] overflow-y-auto space-y-6">
+        <div className="sam-body" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           {/* Preset Selector Banner */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/70">
-            <div className="flex items-center gap-2.5 text-xs text-slate-300">
-              <svg className="w-4 h-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <div
+            className="sam-inset-panel"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "0.75rem",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem" }}>
+              <svg
+                width="16"
+                height="16"
+                style={{ color: isDark ? "#e5a246" : "#b86f1c", flexShrink: 0 }}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="16" x2="12" y2="12" />
                 <line x1="12" y1="8" x2="12.01" y2="8" />
               </svg>
-              <span>Load sample telemetry and chips from recent high-priority events:</span>
+              <span style={{ color: isDark ? "#e8eeed" : "#182a2d" }}>
+                Load sample telemetry and chips from recent high-priority events:
+              </span>
             </div>
             <select
               value={selectedPresetId}
               onChange={(e) => handleSelectPreset(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500"
+              className="sam-select"
+              style={{ maxWidth: "280px" }}
+              aria-label="Load Sample Preset"
             >
               <option value="">Load Sample Preset...</option>
               {presets.map((ev) => (
@@ -349,20 +400,43 @@ export default function SampleAnalyzerModal({
           </div>
 
           {/* Upload Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: "1.25rem",
+              }}
+            >
               {/* RGB Upload Zone */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <label
+                    style={{
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      color: isDark ? "#e8eeed" : "#182a2d",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                    }}
+                  >
                     <span>RGB Satellite Image</span>
-                    <span className="text-amber-400">*</span>
+                    <span style={{ color: isDark ? "#e5a246" : "#b86f1c" }}>*</span>
                   </label>
                   {rgbFile && (
                     <button
                       type="button"
                       onClick={clearRgb}
-                      className="text-[11px] text-rose-400 hover:text-rose-300"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: isDark ? "#f43f5e" : "#be123c",
+                        fontSize: "0.6875rem",
+                        cursor: "pointer",
+                      }}
                     >
                       Clear
                     </button>
@@ -381,62 +455,105 @@ export default function SampleAnalyzerModal({
                     if (e.dataTransfer.files?.[0]) handleRgbSelect(e.dataTransfer.files[0]);
                   }}
                   onClick={() => rgbInputRef.current?.click()}
-                  className={`relative flex flex-col items-center justify-center h-44 rounded-xl border-2 border-dashed transition-all cursor-pointer overflow-hidden ${
-                    isRgbDragging
-                      ? "border-amber-500 bg-amber-500/10"
-                      : rgbPreview
-                      ? "border-slate-700 bg-slate-900/30"
-                      : "border-slate-800 hover:border-slate-700 bg-slate-900/20"
+                  className={`sam-dropzone ${isRgbDragging ? "is-dragging" : ""} ${
+                    rgbPreview ? "has-preview" : ""
                   }`}
                 >
                   <input
                     ref={rgbInputRef}
                     type="file"
                     accept="image/png,image/jpeg,image/tiff,.tif,.tiff"
-                    className="hidden"
+                    style={{ display: "none" }}
                     onChange={(e) => {
                       if (e.target.files?.[0]) handleRgbSelect(e.target.files[0]);
                     }}
                   />
                   {rgbPreview ? (
-                    <div className="relative w-full h-full group">
+                    <div style={{ position: "relative", width: "100%", height: "100%" }}>
                       <img
                         src={rgbPreview}
                         alt="RGB Preview"
-                        className="w-full h-full object-contain p-2"
+                        style={{ width: "100%", height: "100%", objectFit: "contain", padding: "0.5rem" }}
                       />
-                      <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-xs font-medium text-slate-200">
-                        Click to change image
-                      </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-2 p-4 text-center">
-                      <svg className="w-8 h-8 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        padding: "1rem",
+                        textAlign: "center",
+                      }}
+                    >
+                      <svg
+                        width="32"
+                        height="32"
+                        style={{ color: isDark ? "#9ab0b3" : "#4b6164" }}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      >
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                         <polyline points="17 8 12 3 7 8" />
                         <line x1="12" y1="3" x2="12" y2="15" />
                       </svg>
-                      <p className="text-xs text-slate-300 font-medium">
-                        Drag & drop RGB chip or <span className="text-amber-400">browse</span>
+                      <p
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 500,
+                          color: isDark ? "#e8eeed" : "#182a2d",
+                          margin: 0,
+                        }}
+                      >
+                        Drag &amp; drop RGB chip or{" "}
+                        <span style={{ color: isDark ? "#e5a246" : "#b86f1c", fontWeight: 600 }}>browse</span>
                       </p>
-                      <p className="text-[10px] text-slate-500">PNG, JPEG, TIF/TIFF &middot; Max 20MB</p>
+                      <p
+                        style={{
+                          fontSize: "0.6875rem",
+                          color: isDark ? "#9ab0b3" : "#4b6164",
+                          margin: 0,
+                        }}
+                      >
+                        PNG, JPEG, TIF/TIFF &middot; Max 20MB
+                      </p>
                     </div>
                   )}
                 </div>
               </div>
 
               {/* SWIR Upload Zone */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <label
+                    style={{
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      color: isDark ? "#9ab0b3" : "#4b6164",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                    }}
+                  >
                     <span>SWIR Band Image</span>
-                    <span className="text-[10px] lowercase text-slate-500">(optional)</span>
+                    <span style={{ fontSize: "0.625rem", textTransform: "lowercase", opacity: 0.8 }}>(optional)</span>
                   </label>
                   {swirFile && (
                     <button
                       type="button"
                       onClick={clearSwir}
-                      className="text-[11px] text-rose-400 hover:text-rose-300"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: isDark ? "#f43f5e" : "#be123c",
+                        fontSize: "0.6875rem",
+                        cursor: "pointer",
+                      }}
                     >
                       Clear
                     </button>
@@ -455,45 +572,71 @@ export default function SampleAnalyzerModal({
                     if (e.dataTransfer.files?.[0]) handleSwirSelect(e.dataTransfer.files[0]);
                   }}
                   onClick={() => swirInputRef.current?.click()}
-                  className={`relative flex flex-col items-center justify-center h-44 rounded-xl border-2 border-dashed transition-all cursor-pointer overflow-hidden ${
-                    isSwirDragging
-                      ? "border-amber-500 bg-amber-500/10"
-                      : swirPreview
-                      ? "border-slate-700 bg-slate-900/30"
-                      : "border-slate-800 hover:border-slate-700 bg-slate-900/20"
+                  className={`sam-dropzone ${isSwirDragging ? "is-dragging" : ""} ${
+                    swirPreview ? "has-preview" : ""
                   }`}
                 >
                   <input
                     ref={swirInputRef}
                     type="file"
                     accept="image/png,image/jpeg,image/tiff,.tif,.tiff"
-                    className="hidden"
+                    style={{ display: "none" }}
                     onChange={(e) => {
                       if (e.target.files?.[0]) handleSwirSelect(e.target.files[0]);
                     }}
                   />
                   {swirPreview ? (
-                    <div className="relative w-full h-full group">
+                    <div style={{ position: "relative", width: "100%", height: "100%" }}>
                       <img
                         src={swirPreview}
                         alt="SWIR Preview"
-                        className="w-full h-full object-contain p-2"
+                        style={{ width: "100%", height: "100%", objectFit: "contain", padding: "0.5rem" }}
                       />
-                      <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-xs font-medium text-slate-200">
-                        Click to change image
-                      </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-2 p-4 text-center">
-                      <svg className="w-8 h-8 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        padding: "1rem",
+                        textAlign: "center",
+                      }}
+                    >
+                      <svg
+                        width="32"
+                        height="32"
+                        style={{ color: isDark ? "#9ab0b3" : "#4b6164" }}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      >
                         <polygon points="12 2 2 7 12 12 22 7 12 2" />
                         <polyline points="2 17 12 22 22 17" />
                         <polyline points="2 12 12 17 22 12" />
                       </svg>
-                      <p className="text-xs text-slate-400 font-medium">
-                        Paired SWIR2/SWIR1/NIR chip or <span className="text-slate-300">browse</span>
+                      <p
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 500,
+                          color: isDark ? "#e8eeed" : "#182a2d",
+                          margin: 0,
+                        }}
+                      >
+                        Paired SWIR2/SWIR1/NIR chip or{" "}
+                        <span style={{ color: isDark ? "#e5a246" : "#b86f1c", fontWeight: 600 }}>browse</span>
                       </p>
-                      <p className="text-[10px] text-slate-500">Auto-synthesized if omitted</p>
+                      <p
+                        style={{
+                          fontSize: "0.6875rem",
+                          color: isDark ? "#9ab0b3" : "#4b6164",
+                          margin: 0,
+                        }}
+                      >
+                        Auto-synthesized if omitted
+                      </p>
                     </div>
                   )}
                 </div>
@@ -501,22 +644,34 @@ export default function SampleAnalyzerModal({
             </div>
 
             {/* Coordinates & Map Picking Bar */}
-            <div className="p-4 rounded-xl bg-slate-900/30 border border-slate-800/80 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                  WGS84 Coordinates & Geolocation Context
+            <div className="sam-inset-panel" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.75rem",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    color: isDark ? "#e8eeed" : "#182a2d",
+                  }}
+                >
+                  WGS84 Coordinates &amp; Geolocation Context
                 </span>
 
                 <button
                   type="button"
                   onClick={() => setIsPickingLocation(!isPickingLocation)}
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
-                    isPickingLocation
-                      ? "bg-amber-500 text-slate-950 border-amber-400 font-semibold"
-                      : "bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700"
-                  }`}
+                  className={`sam-btn-pick ${isPickingLocation ? "is-active" : ""}`}
                 >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10" />
                     <line x1="22" y1="12" x2="18" y2="12" />
                     <line x1="6" y1="12" x2="2" y2="12" />
@@ -527,27 +682,45 @@ export default function SampleAnalyzerModal({
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem" }}>
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Latitude (&deg;N / &deg;S)</label>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "0.6875rem",
+                      color: isDark ? "#9ab0b3" : "#4b6164",
+                      marginBottom: "0.25rem",
+                    }}
+                  >
+                    Latitude (&deg;N / &deg;S)
+                  </label>
                   <input
                     type="number"
                     step="any"
                     placeholder="e.g. 23.795700 (or extracted from EXIF)"
                     value={latitude}
                     onChange={(e) => setLatitude(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-950/80 border border-slate-800 text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500"
+                    className="sam-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Longitude (&deg;E / &deg;W)</label>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "0.6875rem",
+                      color: isDark ? "#9ab0b3" : "#4b6164",
+                      marginBottom: "0.25rem",
+                    }}
+                  >
+                    Longitude (&deg;E / &deg;W)
+                  </label>
                   <input
                     type="number"
                     step="any"
                     placeholder="e.g. 86.430400 (or extracted from EXIF)"
                     value={longitude}
                     onChange={(e) => setLongitude(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-950/80 border border-slate-800 text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500"
+                    className="sam-input"
                   />
                 </div>
               </div>
@@ -555,8 +728,8 @@ export default function SampleAnalyzerModal({
 
             {/* Error Message */}
             {error && (
-              <div className="flex items-center gap-2.5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <div className="sam-error" role="alert">
+                <svg width="16" height="16" style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2" />
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -566,29 +739,29 @@ export default function SampleAnalyzerModal({
             )}
 
             {/* Action Bar */}
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-xs font-medium rounded-lg text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700 transition-colors"
-              >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.75rem", paddingTop: "0.5rem" }}>
+              <button type="button" onClick={onClose} className="sam-btn-cancel">
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={analyzing || !rgbFile}
-                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all"
-              >
+              <button type="submit" disabled={analyzing || !rgbFile} className="sam-btn-primary">
                 {analyzing ? (
                   <>
-                    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="14"
+                      height="14"
+                      className="te-spin"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                     </svg>
-                    <span>Running Inference & Grad-CAM...</span>
+                    <span>Running Inference &amp; Grad-CAM...</span>
                   </>
                 ) : (
                   <>
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                     </svg>
                     <span>Analyze Sample</span>
@@ -600,77 +773,145 @@ export default function SampleAnalyzerModal({
 
           {/* Results Panel */}
           {result && (
-            <div className="pt-6 border-t border-slate-800/80 space-y-6">
+            <div
+              style={{
+                paddingTop: "1.25rem",
+                borderTop: isDark ? "1px solid #243b3f" : "1px solid #d4cbb9",
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.25rem",
+              }}
+            >
               {/* Header Telemetry Pill */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-slate-900/40 border border-slate-800">
-                <div className="flex items-center gap-3">
+              <div
+                className="sam-inset-panel"
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.75rem",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  {(() => {
+                    const cfg = CLASS_CONFIG[result.predicted_class];
+                    const badge = isDark ? cfg?.badgeDark : cfg?.badgeLight;
+                    return (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "0.25rem 0.75rem",
+                          borderRadius: "9999px",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          background: badge?.bg || "rgba(128,128,128,0.1)",
+                          border: `1px solid ${badge?.border || "#888"}`,
+                          color: badge?.text || (isDark ? "#e8eeed" : "#182a2d"),
+                        }}
+                      >
+                        {cfg?.label || result.predicted_class}
+                      </span>
+                    );
+                  })()}
                   <span
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${
-                      CLASS_CONFIG[result.predicted_class]?.badgeClass || "border-slate-700 text-slate-200"
-                    }`}
+                    style={{
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                      color: isDark ? "#e8eeed" : "#182a2d",
+                    }}
                   >
-                    {CLASS_CONFIG[result.predicted_class]?.label || result.predicted_class}
-                  </span>
-                  <span className="text-sm font-semibold text-slate-100">
                     {(result.confidence * 100).toFixed(1)}% Confidence
                   </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800">
-                    <span className="text-slate-500">Latency:</span>
-                    <strong className="text-slate-200">{result.inference_latency_ms} ms</strong>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+                  <span className="sam-chip">
+                    <span className="sam-chip-label">Latency:</span>
+                    <strong>{result.inference_latency_ms} ms</strong>
                   </span>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800">
-                    <span className="text-slate-500">Modality:</span>
-                    <strong className="text-slate-200">{result.modality}</strong>
+                  <span className="sam-chip">
+                    <span className="sam-chip-label">Modality:</span>
+                    <strong>{result.modality}</strong>
                   </span>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800">
-                    <span className="text-slate-500">Arch:</span>
-                    <strong className="text-slate-200">{result.model_arch}</strong>
+                  <span className="sam-chip">
+                    <span className="sam-chip-label">Arch:</span>
+                    <strong>{result.model_arch}</strong>
                   </span>
                 </div>
               </div>
 
-              {/* Side-by-side Aspect-Square Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Side-by-side Cards */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "1rem",
+                }}
+              >
                 {/* 1. Input RGB Card */}
-                <div className="flex flex-col rounded-xl overflow-hidden border border-slate-800 bg-slate-900/30">
-                  <div className="px-3.5 py-2 text-xs font-semibold tracking-wide text-slate-300 border-b border-slate-800/80 flex items-center justify-between">
+                <div className="sam-img-card">
+                  <div className="sam-img-card-header">
                     <span>Input RGB (Visual)</span>
-                    <span className="text-[10px] text-slate-500">B04 / B03 / B02</span>
+                    <span style={{ fontSize: "0.625rem", color: isDark ? "#9ab0b3" : "#4b6164" }}>B04 / B03 / B02</span>
                   </div>
-                  <div className="aspect-square relative bg-slate-950 flex items-center justify-center p-1">
+                  <div className="sam-img-card-body">
                     <img
                       src={`${apiBase}${result.rgb_url}`}
                       alt="Input RGB Sample"
-                      className="w-full h-full object-contain rounded-lg"
+                      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "0.5rem" }}
                     />
                   </div>
                 </div>
 
                 {/* 2. SWIR Band Card */}
-                <div className="flex flex-col rounded-xl overflow-hidden border border-slate-800 bg-slate-900/30">
-                  <div className="px-3.5 py-2 text-xs font-semibold tracking-wide text-slate-300 border-b border-slate-800/80 flex items-center justify-between">
+                <div className="sam-img-card">
+                  <div className="sam-img-card-header">
                     <span>SWIR Band (False Color)</span>
-                    <span className="text-[10px] text-slate-500">B12 / B11 / B8A</span>
+                    <span style={{ fontSize: "0.625rem", color: isDark ? "#9ab0b3" : "#4b6164" }}>B12 / B11 / B8A</span>
                   </div>
-                  <div className="aspect-square relative bg-slate-950 flex items-center justify-center p-2">
+                  <div className="sam-img-card-body">
                     {result.swir_url ? (
                       <img
                         src={`${apiBase}${result.swir_url}`}
                         alt="SWIR Band Sample"
-                        className="w-full h-full object-contain rounded-lg"
+                        style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "0.5rem" }}
                       />
                     ) : (
-                      <div className="flex flex-col items-center justify-center text-center p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-300">
-                        <svg className="w-8 h-8 mb-2 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          textAlign: "center",
+                          padding: "1rem",
+                          color: isDark ? "#e5a246" : "#b86f1c",
+                        }}
+                      >
+                        <svg
+                          width="32"
+                          height="32"
+                          style={{ marginBottom: "0.5rem" }}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        >
                           <polygon points="12 2 2 7 12 12 22 7 12 2" />
                           <polyline points="2 17 12 22 22 17" />
                           <polyline points="2 12 12 17 22 12" />
                         </svg>
-                        <p className="text-xs font-semibold">SWIR Not Provided</p>
-                        <p className="text-[11px] text-slate-400 mt-1 max-w-[180px]">
+                        <p style={{ fontSize: "0.75rem", fontWeight: 600, margin: 0 }}>SWIR Not Provided</p>
+                        <p
+                          style={{
+                            fontSize: "0.6875rem",
+                            color: isDark ? "#9ab0b3" : "#4b6164",
+                            marginTop: "0.25rem",
+                            maxWidth: "180px",
+                          }}
+                        >
                           Synthesized by replicating RGB channels into bands 4-6
                         </p>
                       </div>
@@ -679,44 +920,78 @@ export default function SampleAnalyzerModal({
                 </div>
 
                 {/* 3. Grad-CAM Overlay Card */}
-                <div className="flex flex-col rounded-xl overflow-hidden border border-slate-800 bg-slate-900/30">
-                  <div className="px-3.5 py-2 text-xs font-semibold tracking-wide text-slate-300 border-b border-slate-800/80 flex items-center justify-between">
+                <div className="sam-img-card">
+                  <div className="sam-img-card-header">
                     <span>Grad-CAM Attribution</span>
-                    <span className="text-[10px] text-amber-400">Salient Features</span>
+                    <span
+                      style={{
+                        fontSize: "0.625rem",
+                        color: isDark ? "#e5a246" : "#b86f1c",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Salient Features
+                    </span>
                   </div>
-                  <div className="aspect-square relative bg-slate-950 flex items-center justify-center p-1">
+                  <div className="sam-img-card-body">
                     {result.gradcam_url ? (
                       <img
                         src={`${apiBase}${result.gradcam_url}`}
                         alt="Grad-CAM Attribution Heatmap"
-                        className="w-full h-full object-contain rounded-lg"
+                        style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "0.5rem" }}
                       />
                     ) : (
-                      <div className="text-xs text-slate-500">Grad-CAM unavailable</div>
+                      <div style={{ fontSize: "0.75rem", color: isDark ? "#9ab0b3" : "#4b6164" }}>
+                        Grad-CAM unavailable
+                      </div>
                     )}
                   </div>
                 </div>
               </div>
 
               {/* Class Probability Distributions */}
-              <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800 space-y-3">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-300 block">
+              <div className="sam-inset-panel" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    color: isDark ? "#e8eeed" : "#182a2d",
+                  }}
+                >
                   Class Probability Distribution
                 </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                    gap: "0.875rem",
+                  }}
+                >
                   {Object.entries(result.class_probabilities).map(([cName, prob]) => {
                     const cfg = CLASS_CONFIG[cName];
                     const percent = (prob * 100).toFixed(1);
+                    const barColor = isDark ? cfg?.barDark || "#74a9ae" : cfg?.barLight || "#2b6e72";
                     return (
-                      <div key={cName} className="space-y-1.5">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-slate-300 font-medium">{cfg?.label || cName}</span>
-                          <span className="text-slate-400 font-mono">{percent}%</span>
+                      <div key={cName} style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem" }}>
+                          <span style={{ color: isDark ? "#e8eeed" : "#182a2d", fontWeight: 500 }}>
+                            {cfg?.label || cName}
+                          </span>
+                          <span style={{ color: isDark ? "#9ab0b3" : "#4b6164", fontFamily: "monospace" }}>
+                            {percent}%
+                          </span>
                         </div>
-                        <div className="h-2 w-full rounded-full bg-slate-800/80 overflow-hidden">
+                        <div className="sam-prob-track">
                           <div
-                            className={`h-full rounded-full ${cfg?.barClass || "bg-slate-400"} transition-all duration-500`}
-                            style={{ width: `${percent}%` }}
+                            style={{
+                              height: "100%",
+                              borderRadius: "9999px",
+                              backgroundColor: barColor,
+                              width: `${percent}%`,
+                              transition: "width 0.5s ease",
+                            }}
                           />
                         </div>
                       </div>
@@ -726,61 +1001,109 @@ export default function SampleAnalyzerModal({
               </div>
 
               {/* Geolocation & Territorial Demarcation Card */}
-              <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800 space-y-3">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-300 block">
-                  Geospatial Verification & Territorial Demarcation
+              <div className="sam-inset-panel" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    color: isDark ? "#e8eeed" : "#182a2d",
+                  }}
+                >
+                  Geospatial Verification &amp; Territorial Demarcation
                 </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                  <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
-                    <span className="text-slate-500 block text-[11px]">WGS84 Coordinates</span>
-                    <span className="font-mono text-slate-200 mt-1 block">
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: "0.75rem",
+                  }}
+                >
+                  <div className="sam-demarcation-card">
+                    <span className="sam-demarcation-label">WGS84 Coordinates</span>
+                    <span className="sam-demarcation-val" style={{ fontFamily: "monospace" }}>
                       {result.location.latitude !== null && result.location.longitude !== null
                         ? `${result.location.latitude.toFixed(4)}, ${result.location.longitude.toFixed(4)}`
                         : "Not specified"}
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
-                    <span className="text-slate-500 block text-[11px]">Survey of India Boundary</span>
-                    <span className="mt-1 flex items-center gap-1.5 font-medium">
+                  <div className="sam-demarcation-card">
+                    <span className="sam-demarcation-label">Survey of India Boundary</span>
+                    <span
+                      className="sam-demarcation-val"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.375rem",
+                        color: result.location.inside_india
+                          ? isDark
+                            ? "#4ade80"
+                            : "#16a34a"
+                          : isDark
+                          ? "#9ab0b3"
+                          : "#4b6164",
+                      }}
+                    >
                       <span
-                        className={`w-2 h-2 rounded-full ${
-                          result.location.inside_india ? "bg-emerald-400" : "bg-slate-500"
-                        }`}
+                        style={{
+                          width: "8px",
+                          height: "8px",
+                          borderRadius: "50%",
+                          backgroundColor: result.location.inside_india ? "#22c55e" : "#94a3b8",
+                        }}
                       />
-                      <span className={result.location.inside_india ? "text-emerald-300" : "text-slate-400"}>
+                      <span>
                         {result.location.inside_india ? "Inside Sovereign India" : "Outside Territory / Unmapped"}
                       </span>
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
-                    <span className="text-slate-500 block text-[11px]">Matched State / UT</span>
-                    <span className="font-medium text-slate-200 mt-1 block">
-                      {result.location.state || "Not identified"}
-                    </span>
+                  <div className="sam-demarcation-card">
+                    <span className="sam-demarcation-label">Matched State / UT</span>
+                    <span className="sam-demarcation-val">{result.location.state || "Not identified"}</span>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
-                    <span className="text-slate-500 block text-[11px]">5 km Thermal Context</span>
-                    <span className="font-medium text-slate-200 mt-1 block">
-                      {result.location.nearby_events_5km} candidate events
-                    </span>
+                  <div className="sam-demarcation-card">
+                    <span className="sam-demarcation-label">5 km Thermal Context</span>
+                    <span className="sam-demarcation-val">{result.location.nearby_events_5km} candidate events</span>
                   </div>
                 </div>
 
                 {result.location.nearest_infrastructure && (
-                  <div className="p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/60 text-xs text-slate-300 flex items-center gap-2">
-                    <span className="text-slate-500">Nearest Infrastructure Context:</span>
-                    <strong className="text-slate-200">{result.location.nearest_infrastructure}</strong>
+                  <div
+                    style={{
+                      padding: "0.625rem 0.875rem",
+                      borderRadius: "0.5rem",
+                      fontSize: "0.75rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      background: isDark ? "rgba(13, 26, 29, 0.6)" : "#ffffff",
+                      border: isDark ? "1px solid #243b3f" : "1px solid #cfc6b4",
+                    }}
+                  >
+                    <span style={{ color: isDark ? "#9ab0b3" : "#4b6164" }}>Nearest Infrastructure Context:</span>
+                    <strong style={{ color: isDark ? "#e8eeed" : "#182a2d" }}>
+                      {result.location.nearest_infrastructure}
+                    </strong>
                   </div>
                 )}
               </div>
 
               {/* Mandatory ML Disclaimer Banner */}
-              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200/90 text-xs flex items-start gap-2.5">
-                <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <div className="sam-disclaimer">
+                <svg
+                  width="16"
+                  height="16"
+                  style={{ flexShrink: 0, marginTop: "2px", color: isDark ? "#e5a246" : "#b86f1c" }}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                   <line x1="12" y1="9" x2="12" y2="13" />
                   <line x1="12" y1="17" x2="12.01" y2="17" />

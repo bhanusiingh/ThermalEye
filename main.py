@@ -461,7 +461,7 @@ async def get_recent_events():
             imagery_swir_path,
             land_cover_class
         FROM candidate_events
-        ORDER BY priority_score DESC NULLS LAST, last_seen DESC
+        ORDER BY (imagery_rgb_path IS NOT NULL) DESC, priority_score DESC NULLS LAST, last_seen DESC
         LIMIT 8
     """
     try:
@@ -494,8 +494,12 @@ async def get_recent_events():
             {
                 "id": str(row["id"]),
                 "state": state_name,
+                "lat": float(row["lat"]) if row["lat"] is not None else None,
+                "lon": float(row["lon"]) if row["lon"] is not None else None,
                 "peak_frp": peak_frp,
                 "evidence": evidence,
+                "imagery_rgb_path": row["imagery_rgb_path"],
+                "imagery_swir_path": row["imagery_swir_path"],
             }
         )
 

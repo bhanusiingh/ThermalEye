@@ -11,8 +11,8 @@
 :root{--bg:#0d1a1f;--bg2:#12232a;--line:#26393f;--tx:#e8edeb;--mut:#93a6a7;--hot:#e0a458;--ember:#d0694c;--cool:#74a9ae;--ok:#7fb99a;--warn:#e0a458;--bad:#d0694c;--unk:#6f8486;--depth:#091418;--btn-tx:#1b1208;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 :root[data-theme=light]{--bg:#f0f3f1;--bg2:#fbfcfb;--line:#d3dcd8;--tx:#15292f;--mut:#566c71;--hot:#b4701f;--ember:#ad4f37;--cool:#2f6a73;--ok:#357f60;--warn:#9b6317;--bad:#ad4f37;--unk:#7b8f93;--depth:#b9c8c4;--btn-tx:#fff9f0;color-scheme:light}
 @media(prefers-color-scheme:light){:root:not([data-theme=dark]):not([data-theme=light]){color-scheme:light}}
-::selection{background:var(--hot);color:var(--btn-tx)}
-::-moz-selection{background:var(--hot);color:var(--btn-tx)}
+::selection{background:color-mix(in srgb, var(--hot) 28%, transparent);color:var(--tx)}
+::-moz-selection{background:color-mix(in srgb, var(--hot) 28%, transparent);color:var(--tx)}
 input,textarea{caret-color:var(--hot)}
 :root{accent-color:var(--hot)}
 *,*::before,*::after{box-sizing:inherit}
@@ -192,11 +192,30 @@ th{font-weight:500;color:var(--mut);font-size:13.5px;border-top:1px solid var(--
 .legend{display:flex;gap:20px;flex-wrap:wrap;font-size:13.5px;color:var(--mut);margin:18px 0 0}
 .legend span{display:inline-flex;gap:7px;align-items:center}
 footer{padding:36px 0 60px;color:var(--mut);font-size:14px;border-top:1px solid var(--line)}
-#models,#trends{position:relative;overflow:hidden}
-#models .wrap,#trends .wrap{position:relative}
+#models,#trends,#analyze{position:relative;overflow:hidden}
+#models .wrap,#trends .wrap,#analyze .wrap{position:relative}
 #sources{min-height:calc(100vh - 64px)}
 #ml-priority-list{columns:1!important;list-style:disc;margin:0;padding-left:18px;color:var(--mut)}
 #ml-priority-list li{margin:0 0 8px;break-inside:auto}
+.an-card{background:color-mix(in srgb,var(--bg2) 80%,transparent);border:1px solid var(--line);border-radius:12px;padding:24px;backdrop-filter:blur(8px)}
+.an-input,.an-select{width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:color-mix(in srgb,var(--bg) 88%,transparent);color:var(--tx);font:inherit;font-size:14px}
+.an-input:focus,.an-select:focus{outline:none;border-color:var(--hot)}
+.an-dropzone{position:relative;height:140px;border-radius:10px;border:2px dashed var(--line);background:color-mix(in srgb,var(--bg) 60%,transparent);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer;padding:12px;transition:border-color .15s,background-color .15s}
+.an-dropzone:hover{border-color:var(--hot)}
+.an-dropzone.dragover{border-color:var(--hot);background:color-mix(in srgb,var(--hot) 12%,transparent)}
+.an-dropzone.has-file{border-style:solid;border-color:var(--line);background:color-mix(in srgb,var(--bg) 95%,transparent)}
+.an-dropzone img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
+.an-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid var(--line)}
+.an-badge.industrial_thermal{border-color:color-mix(in srgb,var(--hot) 50%,transparent);background:color-mix(in srgb,var(--hot) 15%,transparent);color:var(--hot)}
+.an-badge.agricultural_stubble_burn{border-color:color-mix(in srgb,var(--ember) 50%,transparent);background:color-mix(in srgb,var(--ember) 15%,transparent);color:var(--ember)}
+.an-badge.forest_wildfire{border-color:color-mix(in srgb,var(--bad) 50%,transparent);background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad)}
+.an-badge.urban_false_positive{border-color:color-mix(in srgb,var(--cool) 50%,transparent);background:color-mix(in srgb,var(--cool) 15%,transparent);color:var(--cool)}
+.an-bar-track{width:100%;height:8px;border-radius:999px;background:color-mix(in srgb,var(--line) 60%,transparent);overflow:hidden}
+.an-bar-fill{height:100%;border-radius:999px;transition:width .4s ease}
+.an-img-box{display:flex;flex-direction:column;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:color-mix(in srgb,var(--bg) 90%,transparent)}
+.an-img-box-header{padding:6px 10px;font-size:12px;font-weight:600;color:var(--mut);border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+.an-img-box-body{aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;padding:6px;background:color-mix(in srgb,var(--depth) 80%,transparent)}
+.an-img-box-body img{width:100%;height:100%;object-fit:contain;border-radius:4px}
 @media(max-width:960px){.hero-grid,.split,.disc{grid-template-columns:1fr}.strip{grid-template-columns:repeat(2,1fr)}.m{border-bottom:1px solid var(--line);padding-left:0}.m:nth-child(2n){border-right:0;padding-left:18px}.steps{grid-template-columns:1fr;gap:28px}.steps::before{display:none}.steps li{padding:0 0 0 46px}.disc ul{columns:1}nav ul{display:none}.logo{margin-right:auto}.ev{grid-template-columns:1fr auto}.ev>:nth-child(2),.ev>:nth-child(4){display:none}.stage{max-height:none}}
 @media(max-width:1100px){#sat{display:none}}
 @media(prefers-reduced-motion:reduce){.rv{opacity:1;transform:none;transition:none}.steps::before{transform:none;transition:none}.h2s .w>span{transform:none;transition:none}html{scroll-behavior:auto}*{transition:none!important}.bg i,.bg .ct,nav,.hero-copy p,.hero-copy .row,.sel{animation:none!important}.w>span{animation:none;transform:none}.stage{opacity:1;animation:none!important}}
@@ -207,7 +226,7 @@ footer{padding:36px 0 60px;color:var(--mut);font-size:14px;border-top:1px solid 
 <canvas id="sat" aria-hidden="true"></canvas>
 <nav><div class="wrap">
 <a class="logo" href="#hero"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="16" cy="16" r="13"/><circle cx="16" cy="16" r="6" stroke="var(--hot)"/><circle cx="16" cy="16" r="1.8" fill="var(--hot)" stroke="none"/></svg>ThermalEye</a>
-<ul class="nav-links" id="nav-links"><li><a href="#telemetry">Overview</a></li><li><a href="#geo">States</a></li><li><a href="#trends">Trends</a></li><li><a href="#events">Events</a></li><li><a href="#method">Method</a></li><li><a href="#models">ML Validation</a></li><li><a href="#sources">Sources</a></li><li><a href="/dashboard?analyze=1">Analyze Sample</a></li></ul>
+<ul class="nav-links" id="nav-links"><li><a href="#telemetry">Overview</a></li><li><a href="#geo">States</a></li><li><a href="#trends">Trends</a></li><li><a href="#events">Events</a></li><li><a href="#method">Method</a></li><li><a href="#models">ML Validation</a></li><li><a href="#analyze">Analyze Sample</a></li><li><a href="#sources">Sources</a></li></ul>
 <div class="nav-actions">
 <button class="tgl" id="tgl" type="button" aria-label="Switch colour theme"><span id="tglt">Light mode</span></button>
 <a class="btn" href="/dashboard">Launch dashboard</a>
@@ -226,8 +245,8 @@ footer{padding:36px 0 60px;color:var(--mut);font-size:14px;border-top:1px solid 
       <li><a href="#events">Events</a></li>
       <li><a href="#method">Method</a></li>
       <li><a href="#models">ML Validation</a></li>
+      <li><a href="#analyze">Analyze Sample</a></li>
       <li><a href="#sources">Sources</a></li>
-      <li><a href="/dashboard?analyze=1">Analyze Sample</a></li>
     </ul>
   </div>
 </div>
@@ -362,6 +381,172 @@ footer{padding:36px 0 60px;color:var(--mut);font-size:14px;border-top:1px solid 
       <ul id="ml-priority-list" style="margin:0;padding-left:18px">
         <li>Loading priority score validation metrics...</li>
       </ul>
+    </div>
+  </div>
+</div>
+</div></section>
+
+<section id="analyze"><div class="wrap">
+<h2>Analyze Satellite Sample &amp; Demarcation</h2>
+<p class="lead">Upload a Sentinel-2 multispectral chip or choose an active event preset to run on-demand deep land-cover classification, Grad-CAM attribution, and PostGIS infrastructure proximity verification.</p>
+
+<div class="split analyze-split" style="margin-top:36px;align-items:start">
+  <!-- Left Column: Upload Form & Telemetry Input -->
+  <div class="an-card">
+    <form id="an-form">
+      <div style="margin-bottom:18px">
+        <label for="an-preset-select" style="display:block;font-size:13px;font-weight:600;color:var(--mut);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em">Sample Event Presets</label>
+        <select id="an-preset-select" class="an-select">
+          <option value="">Load an active thermal event preset...</option>
+        </select>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+        <!-- RGB Dropzone -->
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <label style="font-size:12.5px;font-weight:600;color:var(--tx);text-transform:uppercase;letter-spacing:0.04em">RGB Image <span style="color:var(--hot)">*</span></label>
+            <button type="button" id="an-rgb-clear" style="display:none;background:none;border:none;color:var(--bad);font-size:11px;cursor:pointer">Clear</button>
+          </div>
+          <div class="an-dropzone" id="an-rgb-zone" tabindex="0" role="button" aria-label="Drop RGB image here">
+            <input type="file" id="an-rgb-input" accept="image/png,image/jpeg,image/tiff,.tif,.tiff" style="display:none">
+            <div id="an-rgb-placeholder">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--mut);margin-bottom:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <div style="font-size:12.5px;font-weight:500;color:var(--tx)">Drop RGB or <span style="color:var(--hot);font-weight:600">browse</span></div>
+              <div style="font-size:11px;color:var(--mut)">PNG, JPEG, TIF/TIFF</div>
+            </div>
+            <img id="an-rgb-preview" style="display:none" alt="RGB Preview">
+          </div>
+        </div>
+
+        <!-- SWIR Dropzone -->
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <label style="font-size:12.5px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:0.04em">SWIR Band <small style="font-size:10px;text-transform:lowercase">(opt)</small></label>
+            <button type="button" id="an-swir-clear" style="display:none;background:none;border:none;color:var(--bad);font-size:11px;cursor:pointer">Clear</button>
+          </div>
+          <div class="an-dropzone" id="an-swir-zone" tabindex="0" role="button" aria-label="Drop SWIR image here">
+            <input type="file" id="an-swir-input" accept="image/png,image/jpeg,image/tiff,.tif,.tiff" style="display:none">
+            <div id="an-swir-placeholder">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--mut);margin-bottom:4px"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+              <div style="font-size:12.5px;font-weight:500;color:var(--tx)">Drop SWIR or <span style="color:var(--hot);font-weight:600">browse</span></div>
+              <div style="font-size:11px;color:var(--mut)">Optional B12/B11/B8A</div>
+            </div>
+            <img id="an-swir-preview" style="display:none" alt="SWIR Preview">
+          </div>
+        </div>
+      </div>
+
+      <!-- Coordinates Box -->
+      <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--line);margin-bottom:18px">
+        <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--mut);margin-bottom:10px">WGS84 Coordinates (Optional)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label for="an-lat-input" style="display:block;font-size:11.5px;color:var(--mut);margin-bottom:4px">Latitude (&deg;N / &deg;S)</label>
+            <input type="number" step="any" id="an-lat-input" class="an-input" placeholder="e.g. 23.795700">
+          </div>
+          <div>
+            <label for="an-lon-input" style="display:block;font-size:11.5px;color:var(--mut);margin-bottom:4px">Longitude (&deg;E / &deg;W)</label>
+            <input type="number" step="any" id="an-lon-input" class="an-input" placeholder="e.g. 86.430400">
+          </div>
+        </div>
+      </div>
+
+      <!-- Error box -->
+      <div id="an-error" style="display:none;padding:10px 14px;border-radius:8px;border:1px solid var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad);font-size:13px;margin-bottom:16px"></div>
+
+      <!-- Submit & Reset -->
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <button type="button" id="an-reset-btn" class="btn ghost" style="height:40px;padding:0 16px;font-size:14px">Reset</button>
+        <button type="submit" id="an-submit-btn" class="btn" style="height:40px;padding:0 22px;font-size:14px;display:inline-flex;align-items:center;gap:8px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span>Analyze Sample</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Right Column: Results & Interpretability Output -->
+  <div class="an-card" id="an-output-container">
+    <!-- Empty State Placeholder -->
+    <div id="an-empty-state" style="text-align:center;padding:36px 16px">
+      <div style="width:48px;height:48px;border-radius:12px;background:color-mix(in srgb,var(--hot) 14%,transparent);border:1px solid color-mix(in srgb,var(--hot) 35%,transparent);color:var(--hot);display:inline-grid;place-items:center;margin-bottom:14px">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      </div>
+      <h3 style="font-size:20px;margin-bottom:8px">Multimodal Intelligence Output</h3>
+      <p style="color:var(--mut);font-size:14.5px;max-width:38ch;margin:0 auto 20px">Select an active preset or drop a satellite chip to predict land-cover class, compute Grad-CAM attribution heatmaps, and query OpenStreetMap infrastructure proximity.</p>
+      <a href="/dashboard" class="btn ghost" style="height:38px;padding:0 18px;font-size:13.5px;display:inline-flex;align-items:center;gap:6px">
+        <span>Launch 3D Dashboard</span>
+        <span>&rarr;</span>
+      </a>
+    </div>
+
+    <!-- Loading State -->
+    <div id="an-loading-state" style="display:none;text-align:center;padding:56px 16px">
+      <div class="dot" style="width:12px;height:12px;background:var(--hot);margin:0 auto 16px;animation:spin 1s linear infinite"></div>
+      <h3 style="font-size:19px;margin-bottom:6px">Analyzing Satellite Chip...</h3>
+      <p style="color:var(--mut);font-size:14px">Running 6-channel ResNet classification, Grad-CAM attribution, and PostGIS spatial indexing.</p>
+    </div>
+
+    <!-- Live Output Panel -->
+    <div id="an-output-panel" style="display:none">
+      <!-- Header telemetry -->
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="an-class-badge" class="an-badge industrial_thermal">Industrial Thermal</span>
+          <strong id="an-confidence" style="font-size:15px;color:var(--tx)">89.4% Confidence</strong>
+        </div>
+        <div style="display:flex;gap:8px;font-size:12px;color:var(--mut)">
+          <span class="pill" style="padding:2px 8px;border-radius:4px;border:1px solid var(--line)">Latency: <strong id="an-latency" style="color:var(--tx)">38 ms</strong></span>
+          <span class="pill" style="padding:2px 8px;border-radius:4px;border:1px solid var(--line)">Modality: <strong id="an-modality" style="color:var(--tx)">RGB+SWIR</strong></span>
+        </div>
+      </div>
+
+      <!-- Previews 3-grid -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
+        <div class="an-img-box">
+          <div class="an-img-box-header"><span>RGB Input</span><small>Visual</small></div>
+          <div class="an-img-box-body"><img id="an-res-rgb" alt="RGB Input"></div>
+        </div>
+        <div class="an-img-box">
+          <div class="an-img-box-header"><span>SWIR Band</span><small>False Color</small></div>
+          <div class="an-img-box-body"><img id="an-res-swir" alt="SWIR Band"></div>
+        </div>
+        <div class="an-img-box">
+          <div class="an-img-box-header"><span>Grad-CAM</span><small style="color:var(--hot)">Saliency</small></div>
+          <div class="an-img-box-body"><img id="an-res-gradcam" alt="Grad-CAM Saliency"></div>
+        </div>
+      </div>
+
+      <!-- Class Distribution Bars -->
+      <div style="margin-bottom:18px">
+        <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--mut);margin-bottom:8px">Class Probabilities</div>
+        <div id="an-prob-list" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+      </div>
+
+      <!-- PostGIS OSM Proximity & Territory -->
+      <div style="padding:12px 14px;border-radius:8px;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--line);margin-bottom:16px;font-size:13px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="color:var(--mut)">Survey of India Boundary:</span>
+          <strong id="an-soi-status" style="color:var(--ok)">Inside Sovereign India</strong>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="color:var(--mut)">Matched State / UT:</span>
+          <strong id="an-state-status" style="color:var(--tx)">Jharkhand</strong>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="color:var(--mut)">Nearest Infrastructure Context:</span>
+          <strong id="an-infra-status" style="color:var(--tx)">Loading...</strong>
+        </div>
+      </div>
+
+      <!-- Link to full dashboard -->
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <a id="an-dashboard-link" href="/dashboard" class="btn ghost" style="height:36px;padding:0 14px;font-size:13px;display:inline-flex;align-items:center;gap:6px">
+          <span>Inspect spatial context on 3D Dashboard</span>
+          <span>&rarr;</span>
+        </a>
+      </div>
     </div>
   </div>
 </div>
@@ -579,6 +764,7 @@ function drawMLMetrics(d){
   }
 }
 drawMLMetrics(null);
+initInlineAnalyzer();
 
 (async()=>{
 const s=await get("/api/summary");
@@ -588,9 +774,274 @@ else $("sumstat").textContent="Backend not reachable. Values show — until the 
 const st=await get("/api/analytics/states");if(st&&st.length){st.forEach(x=>SD[x.state||x.name]=x);drawRank(st.slice().sort((a,b)=>(b.count||0)-(a.count||0)).map(x=>({name:x.state||x.name,count:x.count})))}
 tl=await get("/api/analytics/timeline");chart();drawTlTable();
 const ph=await get("/api/providers/health");if(ph)drawProv(ph);
-const ev=await get("/api/events/recent");if(ev&&ev.length)drawEv(ev.map(e=>["Candidate event #"+e.id,e.state,{available:"Evidence available",partial:"Partial evidence"}[e.evidence]||"Evidence unavailable",{available:"t-ok",partial:"t-part"}[e.evidence]||"t-na",e.id,e.peak_frp]));
+const ev=await get("/api/events/recent");if(ev&&ev.length){
+  drawEv(ev.map(e=>["Candidate event #"+e.id,e.state,{available:"Evidence available",partial:"Partial evidence"}[e.evidence]||"Evidence unavailable",{available:"t-ok",partial:"t-part"}[e.evidence]||"t-na",e.id,e.peak_frp]));
+  if(window.setAnalyzerPresets)window.setAnalyzerPresets(ev);
+}
 const ml=await get("/api/ml/metrics");if(ml)drawMLMetrics(ml);
 })();
+
+function initInlineAnalyzer(){
+  const select=$("an-preset-select");
+  const form=$("an-form");
+  const rgbZone=$("an-rgb-zone");
+  const swirZone=$("an-swir-zone");
+  const rgbInput=$("an-rgb-input");
+  const swirInput=$("an-swir-input");
+  const rgbPreview=$("an-rgb-preview");
+  const swirPreview=$("an-swir-preview");
+  const rgbPlaceholder=$("an-rgb-placeholder");
+  const swirPlaceholder=$("an-swir-placeholder");
+  const rgbClear=$("an-rgb-clear");
+  const swirClear=$("an-swir-clear");
+  const latInput=$("an-lat-input");
+  const lonInput=$("an-lon-input");
+  const errBox=$("an-error");
+  const resetBtn=$("an-reset-btn");
+  const submitBtn=$("an-submit-btn");
+  const emptyState=$("an-empty-state");
+  const loadingState=$("an-loading-state");
+  const outputPanel=$("an-output-panel");
+  const classBadge=$("an-class-badge");
+  const confText=$("an-confidence");
+  const latText=$("an-latency");
+  const modText=$("an-modality");
+  const resRgb=$("an-res-rgb");
+  const resSwir=$("an-res-swir");
+  const resGradcam=$("an-res-gradcam");
+  const probList=$("an-prob-list");
+  const soiStatus=$("an-soi-status");
+  const stateStatus=$("an-state-status");
+  const infraStatus=$("an-infra-status");
+  const dashLink=$("an-dashboard-link");
+
+  if(!form||!select)return;
+
+  let curRgbFile=null;
+  let curSwirFile=null;
+  let presetList=[];
+
+  window.setAnalyzerPresets=function(presets){
+    if(!presets||!presets.length)return;
+    presetList=presets;
+    select.innerHTML='<option value="">Load an active thermal event preset...</option>';
+    presets.forEach(p=>{
+      const opt=document.createElement("option");
+      opt.value=p.id;
+      const frp=p.peak_frp!=null?p.peak_frp:(p.max_frp!=null?p.max_frp:0);
+      opt.textContent=`Event #${String(p.id).slice(0,8)} · ${p.state||"India"} · ${frp} MW`;
+      select.append(opt);
+    });
+  };
+
+  function setRgbFile(file,url){
+    curRgbFile=file;
+    rgbPreview.src=url||URL.createObjectURL(file);
+    rgbPreview.style.display="block";
+    rgbPlaceholder.style.display="none";
+    rgbClear.style.display="inline";
+    rgbZone.classList.add("has-file");
+    errBox.style.display="none";
+  }
+
+  function clearRgb(){
+    curRgbFile=null;
+    rgbInput.value="";
+    rgbPreview.src="";
+    rgbPreview.style.display="none";
+    rgbPlaceholder.style.display="block";
+    rgbClear.style.display="none";
+    rgbZone.classList.remove("has-file");
+  }
+
+  function setSwirFile(file,url){
+    curSwirFile=file;
+    swirPreview.src=url||URL.createObjectURL(file);
+    swirPreview.style.display="block";
+    swirPlaceholder.style.display="none";
+    swirClear.style.display="inline";
+    swirZone.classList.add("has-file");
+  }
+
+  function clearSwir(){
+    curSwirFile=null;
+    swirInput.value="";
+    swirPreview.src="";
+    swirPreview.style.display="none";
+    swirPlaceholder.style.display="block";
+    swirClear.style.display="none";
+    swirZone.classList.remove("has-file");
+  }
+
+  rgbClear.onclick=e=>{e.stopPropagation();clearRgb()};
+  swirClear.onclick=e=>{e.stopPropagation();clearSwir()};
+
+  rgbZone.onclick=()=>rgbInput.click();
+  swirZone.onclick=()=>swirInput.click();
+
+  rgbInput.onchange=()=>{
+    if(rgbInput.files&&rgbInput.files[0])setRgbFile(rgbInput.files[0]);
+  };
+  swirInput.onchange=()=>{
+    if(swirInput.files&&swirInput.files[0])setSwirFile(swirInput.files[0]);
+  };
+
+  [rgbZone,swirZone].forEach((zone,idx)=>{
+    zone.ondragover=zone.ondragenter=e=>{e.preventDefault();zone.classList.add("dragover")};
+    zone.ondragleave=zone.ondragend=()=>zone.classList.remove("dragover");
+    zone.ondrop=e=>{
+      e.preventDefault();
+      zone.classList.remove("dragover");
+      if(e.dataTransfer.files&&e.dataTransfer.files[0]){
+        if(idx===0)setRgbFile(e.dataTransfer.files[0]);
+        else setSwirFile(e.dataTransfer.files[0]);
+      }
+    };
+  });
+
+  select.onchange=async()=>{
+    const id=select.value;
+    if(!id||!presetList.length)return;
+    const p=presetList.find(x=>String(x.id)===String(id));
+    if(!p)return;
+    if(p.latitude!=null)latInput.value=p.latitude;
+    else if(p.lat!=null)latInput.value=p.lat;
+    if(p.longitude!=null)lonInput.value=p.longitude;
+    else if(p.lon!=null)lonInput.value=p.lon;
+
+    if(p.imagery_rgb_path){
+      const fn=p.imagery_rgb_path.split(/[/\\]/).pop();
+      try{
+        const r=await fetch(API+"/static/imagery/"+fn);
+        if(r.ok){
+          const b=await r.blob();
+          const f=new File([b],fn,{type:b.type||"image/png"});
+          setRgbFile(f,URL.createObjectURL(b));
+        }
+      }catch(e){console.error("Failed to load preset RGB imagery",e)}
+    }
+    if(p.imagery_swir_path){
+      const fn=p.imagery_swir_path.split(/[/\\]/).pop();
+      try{
+        const r=await fetch(API+"/static/imagery/"+fn);
+        if(r.ok){
+          const b=await r.blob();
+          const f=new File([b],fn,{type:b.type||"image/png"});
+          setSwirFile(f,URL.createObjectURL(b));
+        }
+      }catch(e){console.error("Failed to load preset SWIR imagery",e)}
+    }
+  };
+
+  function resetAll(){
+    clearRgb();
+    clearSwir();
+    select.value="";
+    latInput.value="";
+    lonInput.value="";
+    errBox.style.display="none";
+    errBox.textContent="";
+    emptyState.style.display="block";
+    loadingState.style.display="none";
+    outputPanel.style.display="none";
+  }
+  resetBtn.onclick=resetAll;
+
+  const CLASS_MAP={
+    industrial_thermal:{label:"Industrial Thermal Anomaly",color:"var(--hot)"},
+    agricultural_stubble_burn:{label:"Agricultural Stubble Burn",color:"var(--ember)"},
+    forest_wildfire:{label:"Forest Wildfire",color:"var(--bad)"},
+    urban_false_positive:{label:"Urban / Solar False Positive",color:"var(--cool)"}
+  };
+
+  form.onsubmit=async e=>{
+    e.preventDefault();
+    if(!curRgbFile){
+      errBox.textContent="Please select or drop an RGB satellite image (or pick an active preset).";
+      errBox.style.display="block";
+      return;
+    }
+    errBox.style.display="none";
+    emptyState.style.display="none";
+    outputPanel.style.display="none";
+    loadingState.style.display="block";
+    submitBtn.disabled=true;
+
+    const fd=new FormData();
+    fd.append("rgb_file",curRgbFile);
+    if(curSwirFile)fd.append("swir_file",curSwirFile);
+    const lat=parseFloat(latInput.value);
+    if(!isNaN(lat))fd.append("latitude",lat);
+    const lon=parseFloat(lonInput.value);
+    if(!isNaN(lon))fd.append("longitude",lon);
+
+    try{
+      const resp=await fetch(API+"/api/analyze-sample",{method:"POST",body:fd});
+      if(!resp.ok){
+        let err="Analysis failed ("+resp.status+")";
+        try{
+          const ej=await resp.json();
+          if(ej&&ej.detail)err=typeof ej.detail==="string"?ej.detail:JSON.stringify(ej.detail);
+        }catch(_){}
+        throw new Error(err);
+      }
+      const data=await resp.json();
+      loadingState.style.display="none";
+      outputPanel.style.display="block";
+
+      const cfg=CLASS_MAP[data.predicted_class]||{label:data.predicted_class,color:"var(--hot)"};
+      classBadge.className="an-badge "+(data.predicted_class||"");
+      classBadge.textContent=cfg.label;
+      confText.textContent=((data.confidence||0)*100).toFixed(1)+"% Confidence";
+      latText.textContent=(data.inference_latency_ms||"—")+" ms";
+      modText.textContent=data.modality||(curSwirFile?"RGB + SWIR":"RGB-Only");
+
+      resRgb.src=data.rgb_url||"";
+      resSwir.src=data.swir_url||data.rgb_url||"";
+      resGradcam.src=data.gradcam_url||data.rgb_url||"";
+
+      // Class probabilities list
+      const probs=data.class_probabilities||{};
+      probList.innerHTML=Object.keys(CLASS_MAP).map(k=>{
+        const val=probs[k]||0;
+        const pct=(val*100).toFixed(1)+"%";
+        const c=CLASS_MAP[k]||{label:k,color:"var(--tx)"};
+        return `<div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;font-size:12px">
+            <span style="color:var(--tx)">${c.label}</span>
+            <strong style="color:var(--tx)">${pct}</strong>
+          </div>
+          <div class="an-bar-track">
+            <div class="an-bar-fill" style="width:${pct};background:${c.color}"></div>
+          </div>
+        </div>`;
+      }).join("");
+
+      // Spatial Demarcation & Infrastructure
+      const loc=data.location||{};
+      if(loc.latitude!=null&&loc.longitude!=null){
+        soiStatus.textContent=loc.inside_india?"Inside Sovereign India":"Outside Sovereign Boundary";
+        soiStatus.style.color=loc.inside_india?"var(--ok)":"var(--warn)";
+        stateStatus.textContent=loc.state||"Not identified / Maritime";
+        infraStatus.textContent=loc.nearest_infrastructure||"No mapped infrastructure within 5 km";
+        dashLink.href=`/dashboard?lat=${loc.latitude}&lon=${loc.longitude}&zoom=13`;
+      }else{
+        soiStatus.textContent="Coordinates omitted";
+        soiStatus.style.color="var(--mut)";
+        stateStatus.textContent="Not specified";
+        infraStatus.textContent="Provide coordinates for OSM proximity indexing";
+        dashLink.href="/dashboard";
+      }
+    }catch(err){
+      loadingState.style.display="none";
+      errBox.textContent=err.message||"Failed to process sample";
+      errBox.style.display="block";
+      emptyState.style.display="block";
+    }finally{
+      submitBtn.disabled=false;
+    }
+  };
+}
 
 const Globe=(()=>{
 const subs=[];
@@ -712,7 +1163,7 @@ const rm=matchMedia("(prefers-reduced-motion:reduce)").matches;
 document.querySelectorAll("section h2").forEach(h=>{h.classList.add("h2s");h.setAttribute("aria-label",h.textContent);h.innerHTML=h.textContent.split(" ").map((w,i)=>`<span class="w" aria-hidden="true"><span style="--wd:${i*70}ms">${w}</span></span>`).join(" ")});
 if(!rm){
 const set=(sel,fn)=>document.querySelectorAll(sel).forEach((e,i)=>{e.classList.add("rv");e.style.setProperty("--d",(fn?fn(i):0)+"ms")});
-set(".lead",()=>120);set(".status",()=>200);set(".strip .m",i=>i*90);set("#geo .split>div",i=>i*140);set("#trends .tabs");set("#trends .chartbox",()=>120);set("#evgrid");set(".steps li",i=>i*140+200);set(".disc");set("#sources .scroll");set(".legend",()=>150);set("footer .wrap");
+set(".lead",()=>120);set(".status",()=>200);set(".strip .m",i=>i*90);set("#geo .split>div",i=>i*140);set("#trends .tabs");set("#trends .chartbox",()=>120);set("#evgrid");set(".steps li",i=>i*140+200);set(".disc");set("#models .split>div",i=>i*140);set("#analyze .split>div",i=>i*140);set("#sources .scroll");set(".legend",()=>150);set("footer .wrap");
 document.querySelector("#geo .split>div").classList.add("tilt");
 const obs=[...document.querySelectorAll(".rv,.h2s,.steps")];
 const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}}),{threshold:.12,rootMargin:"0px 0px -6% 0px"});

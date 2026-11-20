@@ -276,26 +276,36 @@ function applyBasemapTheme(map: any, theme: ThemeMode) {
         map.setPaintProperty(id, "text-halo-color", haloColor);
         map.setPaintProperty(id, "text-halo-width", 1.8);
 
-        // Exclude India and Bangladesh from country symbol layers without duplicate stacking
-        if (
-          id.startsWith("place_country") ||
-          id.includes("country_label") ||
-          id.includes("country")
-        ) {
+        // Exclude India and Bangladesh across all common CARTO/OpenMapTiles name properties
+        const textField = map.getLayoutProperty(id, "text-field");
+        const textFieldStr = JSON.stringify(textField || "");
+        const isCountryOrPlace = /country|place/i.test(id) || textFieldStr.includes("name");
+
+        if (isCountryOrPlace) {
           const currentFilter = map.getFilter(id);
           const filterStr = JSON.stringify(currentFilter || "");
           if (!filterStr.includes('"india"')) {
-            const exclusionExpr = [
+            const excludeExpr: any = [
               "!",
               [
                 "in",
-                ["downcase", ["coalesce", ["get", "name_en"], ["get", "name"], ""]],
+                [
+                  "downcase",
+                  [
+                    "coalesce",
+                    ["get", "name_en"],
+                    ["get", "name:en"],
+                    ["get", "name_int"],
+                    ["get", "name"],
+                    "",
+                  ],
+                ],
                 ["literal", ["india", "bangladesh"]],
               ],
             ];
             const newFilter = currentFilter
-              ? ["all", currentFilter, exclusionExpr]
-              : exclusionExpr;
+              ? ["all", currentFilter, excludeExpr]
+              : excludeExpr;
             map.setFilter(id, newFilter);
           }
         }
@@ -398,20 +408,31 @@ function buildThemedMapStyle(rawStyle: any, theme: ThemeMode) {
       paint["text-halo-color"] = isDark ? "#0d1a1d" : "#f2ece1";
       paint["text-halo-width"] = 1.8;
       let filter = layer.filter;
-      if (
-        id.startsWith("place_country") ||
-        id.includes("country_label") ||
-        id.includes("country")
-      ) {
-        const exclusionExpr = [
-          "!",
-          [
-            "in",
-            ["downcase", ["coalesce", ["get", "name_en"], ["get", "name"], ""]],
-            ["literal", ["india", "bangladesh"]],
-          ],
-        ];
-        filter = filter ? ["all", filter, exclusionExpr] : exclusionExpr;
+      const textFieldStr = JSON.stringify(layer.layout?.["text-field"] || "");
+      const isCountryOrPlace = /country|place/i.test(id) || textFieldStr.includes("name");
+      if (isCountryOrPlace) {
+        const filterStr = JSON.stringify(filter || "");
+        if (!filterStr.includes('"india"')) {
+          const excludeExpr: any = [
+            "!",
+            [
+              "in",
+              [
+                "downcase",
+                [
+                  "coalesce",
+                  ["get", "name_en"],
+                  ["get", "name:en"],
+                  ["get", "name_int"],
+                  ["get", "name"],
+                  "",
+                ],
+              ],
+              ["literal", ["india", "bangladesh"]],
+            ],
+          ];
+          filter = filter ? ["all", filter, excludeExpr] : excludeExpr;
+        }
       }
       return { ...layer, paint, filter };
     }
@@ -840,15 +861,18 @@ export default function App() {
           lineWidthMinPixels: 1,
           getLineColor: [...pal.emberRgb, 190],
           getFillColor: (f: any) => {
+            const isDark = theme === "dark";
             const score = f.properties?.priority_score;
             const base = priorityToColor(score, theme);
-            if (selectedEventId) {
+            if (selectedEventId !== null) {
               if (f.properties?.id === selectedEventId) {
-                return theme === "dark" ? [253, 224, 140, 240] : [184, 111, 28, 240];
+                return isDark ? [253, 224, 140, 255] : [184, 111, 28, 255];
               }
-              return [base[0], base[1], base[2], 95];
+              const dimAlpha = isDark ? 48 : 42;
+              return [base[0], base[1], base[2], dimAlpha];
             }
-            return base;
+            const defaultAlpha = isDark ? 125 : 110;
+            return [base[0], base[1], base[2], defaultAlpha];
           },
           getLineWidth: 1.5,
           onClick: handleClick,
@@ -884,14 +908,18 @@ export default function App() {
             return baseHeight;
           },
           getFillColor: (d: any) => {
-            if (selectedEventId) {
+            const isDark = theme === "dark";
+            if (selectedEventId !== null) {
               if (d.id === selectedEventId) {
-                return theme === "dark" ? [253, 224, 140, 255] : [184, 111, 28, 255];
+                return isDark ? [253, 224, 140, 255] : [184, 111, 28, 255];
               }
               const base = priorityToColor(d.priorityScore, theme);
-              return [base[0], base[1], base[2], 95];
+              const dimAlpha = isDark ? 48 : 42;
+              return [base[0], base[1], base[2], dimAlpha];
             }
-            return priorityToColor(d.priorityScore, theme);
+            const base = priorityToColor(d.priorityScore, theme);
+            const defaultAlpha = isDark ? 125 : 110;
+            return [base[0], base[1], base[2], defaultAlpha];
           },
           onClick: handleClick,
           updateTriggers: {
@@ -987,7 +1015,12 @@ export default function App() {
 
     // 4) Sovereign Country Labels (Rendered top-most after boundary & ColumnLayer)
     const currentZoom = viewState.zoom || 4.5;
-    const zoomFade = currentZoom <= 6.5 ? 1 : Math.max(0, 1 - (currentZoom - 6.5) / 1.5);
+    const zoomFade =
+      currentZoom > 5.8
+        ? 0
+        : currentZoom <= 5.0
+        ? 1
+        : Math.max(0, (5.8 - currentZoom) / 0.8);
 
     if (zoomFade > 0.02) {
       const isDark = theme === "dark";
@@ -1018,7 +1051,9 @@ export default function App() {
             },
           ],
           pickable: false,
-          getPosition: (d: any) => d.coordinates,
+          billboard: true,
+          parameters: { depthTest: false },
+          getPosition: (d: any) => [d.coordinates[0], d.coordinates[1], 0],
           getText: (d: any) => d.text,
           getSize: (d: any) => d.size,
           getColor: (d: any) => d.color,
@@ -1123,40 +1158,38 @@ export default function App() {
               </svg>
               <span className="te-logo-text">ThermalEye</span>
             </a>
-
-            <ul className="te-nav-links" id="dashboard-nav-links">
-              <li><a href="/#overview">Overview</a></li>
-              <li><a href="/#states">States</a></li>
-              <li><a href="/#trends">Trends</a></li>
-              <li><a href="/#events">Events</a></li>
-              <li><a href="/#method">Method</a></li>
-              <li><a href="/#models">ML Validation</a></li>
-              <li><a href="/#sources">Sources</a></li>
-            </ul>
           </div>
 
           <div className="te-nav-actions">
-            {loading && (
-              <div className="te-status-inline is-warn" role="status" aria-live="polite">
-                <span className="te-dot te-dot-warn" />
-                <span className="te-btn-label">Syncing</span>
-              </div>
-            )}
-
-            {error && (
-              <div className="te-status-inline is-bad" role="alert">
-                <span className="te-dot te-dot-bad" />
-                <span className="te-btn-label">Connection error</span>
-              </div>
-            )}
-
-            {/* 1. Compact status pill: active events count */}
-            <div className="te-chip" aria-label={`${activeCount} active events`}>
-              <span className="te-chip-count">{activeCount}</span>
+            {/* 1. Active events status pill */}
+            <div className="te-chip" aria-label={`${activeCount.toLocaleString()} active events`}>
+              <span className="te-chip-count">{activeCount.toLocaleString()}</span>
               <span className="te-chip-label">active events</span>
             </div>
 
-            {/* 2. Secondary ghost button: Refresh */}
+            {/* 2. Home ghost/outline link */}
+            <a
+              href="/"
+              className="btn ghost"
+              title="Return to ThermalEye landing page"
+              aria-label="Home"
+            >
+              <svg
+                className="w-3.5 h-3.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+              <span className="te-btn-label">Home</span>
+            </a>
+
+            {/* 3. Refresh ghost/outline button */}
             <button
               type="button"
               onClick={fetchActiveEvents}
@@ -1366,6 +1399,7 @@ export default function App() {
         isOpen={isAnalyzeOpen}
         onClose={() => setIsAnalyzeOpen(false)}
         apiBase={API_BASE}
+        theme={theme}
         isPickingLocation={isPickingLocation}
         setIsPickingLocation={setIsPickingLocation}
         pickedCoordinates={pickedCoordinates}
