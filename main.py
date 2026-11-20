@@ -16,6 +16,7 @@ Architectural invariants:
 
 from __future__ import annotations
 
+import gc
 import io
 import json
 import logging
@@ -23,6 +24,7 @@ import os
 import re
 import sys
 import time
+import urllib.request
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -35,7 +37,7 @@ import torch
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ExifTags, UnidentifiedImageError
 from shapely.geometry import MultiPolygon, Point, Polygon
@@ -51,22 +53,37 @@ logging.basicConfig(
 logger = logging.getLogger("thermaleye.api")
 
 # ---------------------------------------------------------------------------
-# Environment
+# Environment & Database Configuration
 # ---------------------------------------------------------------------------
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(dotenv_path=os.path.join(_script_dir, ".env"))
 
-DATABASE_URL: str = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://thermaleye:thermaleye_secret@localhost:5432/thermaleye",
-)
 
-# Strip the scheme to plain DSN if needed — asyncpg wants postgresql://
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+def resolve_database_url() -> str:
+    """Resolve database URL supporting direct cloud DSNs (Neon Postgres) with SSL parameters,
+
+    falling back to granular DB_* environment variables for local Docker Compose.
+    """
+    raw_url = os.environ.get("DATABASE_URL", "").strip()
+    if raw_url:
+        # Preserve query parameters (e.g. sslmode=require, channel_binding=require for Neon Postgres)
+        if raw_url.startswith("postgres://"):
+            raw_url = raw_url.replace("postgres://", "postgresql://", 1)
+        return raw_url
+
+    # Fallback to local Docker Compose environment variables
+    db_host = os.environ.get("DB_HOST", "localhost")
+    db_port = os.environ.get("DB_PORT", "5432")
+    db_name = os.environ.get("DB_NAME", "thermaleye")
+    db_user = os.environ.get("DB_USER", "thermaleye")
+    db_pass = os.environ.get("DB_PASSWORD", "thermaleye_secret")
+    return f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+
+
+DATABASE_URL: str = resolve_database_url()
 
 API_HOST: str = os.environ.get("API_HOST", "0.0.0.0")
-API_PORT: int = int(os.environ.get("API_PORT", "8000"))
+API_PORT: int = int(os.environ.get("API_PORT", os.environ.get("PORT", "8000")))
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -88,12 +105,13 @@ pool: Optional[asyncpg.Pool] = None
 async def lifespan(app: FastAPI):
     """Manage the asyncpg connection pool lifecycle and schema migrations."""
     global pool
-    logger.info("Connecting to PostGIS at %s", DATABASE_URL.split("@")[-1])
+    db_display = DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else DATABASE_URL
+    logger.info("Connecting to PostGIS at %s", db_display)
     try:
         pool = await asyncpg.create_pool(
             DATABASE_URL,
-            min_size=2,
-            max_size=10,
+            min_size=int(os.environ.get("DB_POOL_MIN", "1")),
+            max_size=int(os.environ.get("DB_POOL_MAX", "5" if os.environ.get("RENDER") else "10")),
             command_timeout=30,
         )
         logger.info("Database pool created.")
@@ -1145,15 +1163,38 @@ _SAMPLE_MODEL_BUNDLE = None
 
 
 def get_sample_analysis_model() -> dict:
-    """Lazy-load the fine-tuned 6-channel champion model and channel normalization stats."""
+    """Lazy-load the fine-tuned 6-channel champion model and channel normalization stats.
+
+    Enforces single-thread execution and downloads the checkpoint automatically from
+    os.getenv('MODEL_URL') if absent on disk, optimizing for Render 512 MB RAM limit.
+    """
     global _SAMPLE_MODEL_BUNDLE
     if _SAMPLE_MODEL_BUNDLE is not None:
         return _SAMPLE_MODEL_BUNDLE
 
+    # Enforce single-thread execution to prevent memory spikes on free-tier (512 MB RAM)
+    torch.set_num_threads(1)
+
     from ml.models import build_model
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    weights_path = os.path.join(_script_dir, "models", "thermaleye_best.pt")
+    models_dir = os.path.join(_script_dir, "models")
+    os.makedirs(models_dir, exist_ok=True)
+    weights_path = os.path.join(models_dir, "thermaleye_best.pt")
+
+    # If weights file is not on disk, automatically download from MODEL_URL if provided
+    if not os.path.isfile(weights_path):
+        model_url = os.getenv("MODEL_URL", "").strip()
+        if model_url:
+            logger.info("Champion weights not found at %s. Downloading from MODEL_URL: %s", weights_path, model_url)
+            try:
+                urllib.request.urlretrieve(model_url, weights_path)
+                logger.info(
+                    "Successfully downloaded champion model weights (%.2f MB).",
+                    os.path.getsize(weights_path) / (1024 * 1024),
+                )
+            except Exception as e:
+                logger.error("Failed to download model weights from %s: %s", model_url, e)
 
     class_names = [
         "industrial_thermal",
@@ -1182,12 +1223,14 @@ def get_sample_analysis_model() -> dict:
 
     if os.path.isfile(weights_path):
         try:
-            checkpoint = torch.load(weights_path, map_location=device)
+            checkpoint = torch.load(weights_path, map_location=device, weights_only=False)
             arch = checkpoint.get("arch", arch)
             in_channels = checkpoint.get("in_channels", in_channels)
             class_names = checkpoint.get("class_names", class_names)
             model = build_model(arch=arch, in_channels=in_channels, num_classes=len(class_names), pretrained=False)
             model.load_state_dict(checkpoint["state_dict"])
+            del checkpoint
+            gc.collect()
         except Exception as e:
             logger.warning("Failed loading checkpoint from %s: %s. Using initialized model.", weights_path, e)
             model = build_model(arch=arch, in_channels=in_channels, num_classes=len(class_names), pretrained=False)
@@ -1424,6 +1467,8 @@ async def analyze_sample(
     except Exception as e:
         logger.exception("Grad-CAM generation failed for sample %s: %s", sample_id, e)
         gradcam_url = None
+    finally:
+        gc.collect()
 
     return {
         "sample_id": sample_id,
@@ -1439,6 +1484,46 @@ async def analyze_sample(
         "location": location,
         "disclaimer": ML_DISCLAIMER,
     }
+
+
+# ---------------------------------------------------------------------------
+# Single-Container Cloud Frontend Serving (Render / Production)
+# ---------------------------------------------------------------------------
+FRONTEND_DIST_DIR = os.path.join(_script_dir, "frontend", "dist")
+SERVE_FRONTEND: bool = (
+    os.environ.get("SERVE_FRONTEND", "").strip().lower() in ("1", "true", "yes")
+    or os.path.isfile(os.path.join(FRONTEND_DIST_DIR, "index.html"))
+)
+
+if SERVE_FRONTEND and os.path.isdir(FRONTEND_DIST_DIR):
+    assets_dir = os.path.join(FRONTEND_DIST_DIR, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="frontend_assets")
+
+    index_html_path = os.path.join(FRONTEND_DIST_DIR, "index.html")
+    dashboard_html_path = os.path.join(FRONTEND_DIST_DIR, "dashboard.html")
+
+    @app.get("/", include_in_schema=False)
+    async def serve_frontend_index():
+        if os.path.isfile(index_html_path):
+            return FileResponse(index_html_path, media_type="text/html")
+        raise HTTPException(status_code=404, detail="Frontend index.html not found.")
+
+    @app.get("/dashboard", include_in_schema=False)
+    async def serve_frontend_dashboard():
+        if os.path.isfile(dashboard_html_path):
+            return FileResponse(dashboard_html_path, media_type="text/html")
+        raise HTTPException(status_code=404, detail="Frontend dashboard.html not found.")
+
+    @app.get("/{filename:path}", include_in_schema=False)
+    async def serve_frontend_static_root(filename: str):
+        # Exclude reserved prefixes so API, static, and assets routes are never intercepted
+        if any(filename.startswith(p) for p in ("api/", "static/", "assets/")):
+            raise HTTPException(status_code=404, detail="Not found.")
+        target_path = os.path.join(FRONTEND_DIST_DIR, filename)
+        if os.path.isfile(target_path):
+            return FileResponse(target_path)
+        raise HTTPException(status_code=404, detail="Not found.")
 
 
 # ---------------------------------------------------------------------------

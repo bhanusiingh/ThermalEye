@@ -1,0 +1,69 @@
+# syntax=docker/dockerfile:1
+# ===========================================================================
+# ThermalEye — Single-Container Cloud Production Dockerfile (Render Free-Tier)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Stage 1: Build Production Frontend SPA Bundle
+# ---------------------------------------------------------------------------
+FROM node:20-slim AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Copy package manifests and install dependencies
+COPY frontend/package*.json ./
+RUN npm ci
+
+# Copy frontend source files and compile production bundle
+COPY frontend/ ./
+RUN npm run build
+
+# ---------------------------------------------------------------------------
+# Stage 2: Minimal Python Runtime Container
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim
+
+# System & performance environment configuration
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    SERVE_FRONTEND=1
+
+WORKDIR /app
+
+# Install minimal runtime system libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install CPU-only PyTorch & Torchvision first to minimize image size and memory usage
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining Python dependencies (skipping torch, torchvision, and offline osmium)
+COPY requirements.txt .
+RUN grep -vE '^(torch|torchvision|osmium)' requirements.txt > /tmp/req_render.txt && \
+    pip install --no-cache-dir -r /tmp/req_render.txt && \
+    rm -f /tmp/req_render.txt
+
+# Ensure static directories and models directory exist
+RUN mkdir -p /app/static/imagery /app/static/uploads /app/models /app/data
+
+# Copy backend Python application scripts
+COPY main.py run_pipeline.py ingest_firms.py cluster_events.py enrich_osm_and_score.py fetch_imagery.py classify_landcover.py schema.sql ./
+
+# Copy packages, artifacts, geospatial metadata, and static assets
+COPY ml/ ./ml/
+COPY artifacts/ ./artifacts/
+COPY data/ ./data/
+COPY static/ ./static/
+
+# Copy compiled frontend distribution bundle from Stage 1
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+
+# Expose default port (overridden dynamically by Render at runtime via $PORT)
+EXPOSE 8000
+
+# Shell-form CMD expands Render's dynamic ${PORT} environment variable at runtime
+# --workers 1 keeps memory footprint strictly within Render free-tier 512 MB RAM
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
