@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { Map } from "react-map-gl/maplibre";
 import DeckGL from "@deck.gl/react";
@@ -37,31 +37,31 @@ interface MapPalette {
 // Map style configuration synced to :root / :root[data-theme="light"] tokens
 const MAP_PALETTES: Record<ThemeMode, MapPalette> = {
   dark: {
-    bg: "#0d1a1f",
+    bg: "#0d1a1d",
     bg2: "#12232a",
-    landSubtle: "#162a32",
-    depth: "#091418",
-    line: "#26393f",
-    road: "#1d3037",
+    landSubtle: "#162628",
+    depth: "#0d1a1d",
+    line: "#243b3f",
+    road: "#243b3f",
     tx: "#e8edeb",
-    mut: "#93a6a7",
+    mut: "#9ab0b3",
     hotRgb: [224, 164, 88],
     emberRgb: [208, 105, 76],
-    coolRgb: [116, 169, 174],
+    coolRgb: [79, 163, 165],
     unkRgb: [111, 132, 134],
   },
   light: {
-    bg: "#f0f3f1",
+    bg: "#f2ece1",
     bg2: "#fbfcfb",
-    landSubtle: "#e8efec",
-    depth: "#b9c8c4",
-    line: "#d3dcd8",
-    road: "#dce4e0",
-    tx: "#15292f",
+    landSubtle: "#f2ece1",
+    depth: "#cfe0df",
+    line: "#d4cbb9",
+    road: "#d4cbb9",
+    tx: "#23383b",
     mut: "#566c71",
-    hotRgb: [180, 112, 31],
+    hotRgb: [184, 111, 28],
     emberRgb: [173, 79, 55],
-    coolRgb: [47, 106, 115],
+    coolRgb: [43, 110, 114],
     unkRgb: [123, 143, 147],
   },
 };
@@ -164,23 +164,159 @@ function priorityToColor(
 }
 
 // ---------------------------------------------------------------------------
-// Theme & Sanitize MapLibre Basemap Style
+// Apply Dynamic MapLibre Basemap Styling & Sovereign Exclusion
+// ---------------------------------------------------------------------------
+function applyBasemapTheme(map: any, theme: ThemeMode) {
+  if (!map || !map.isStyleLoaded || !map.isStyleLoaded()) return;
+
+  const style = map.getStyle();
+  if (!style || !Array.isArray(style.layers)) return;
+
+  const isDark = theme === "dark";
+
+  style.layers.forEach((layer: any) => {
+    const id: string = layer.id || "";
+    const type: string = layer.type || "";
+
+    // Hide boundary layers that misrepresent Indian sovereignty
+    if (
+      id === "boundary_country_inner" ||
+      id === "boundary_country_outline" ||
+      id === "boundary_state" ||
+      id === "boundary_county"
+    ) {
+      if (map.getLayer(id)) {
+        map.setLayoutProperty(id, "visibility", "none");
+      }
+      return;
+    }
+
+    if (type === "background") {
+      if (map.getLayer(id)) {
+        map.setPaintProperty(id, "background-color", isDark ? "#0d1a1d" : "#cfe0df");
+      }
+      return;
+    }
+
+    if (id === "water" || id === "water_shadow") {
+      if (map.getLayer(id)) {
+        map.setPaintProperty(id, "fill-color", isDark ? "#0d1a1d" : "#cfe0df");
+        map.setPaintProperty(id, "fill-opacity", 1.0);
+      }
+      return;
+    }
+
+    if (id === "waterway") {
+      if (map.getLayer(id)) {
+        map.setPaintProperty(id, "line-color", isDark ? "#0d1a1d" : "#b9d2d1");
+      }
+      return;
+    }
+
+    if (
+      id === "landcover" ||
+      id.startsWith("park_") ||
+      id.startsWith("landuse") ||
+      id === "land"
+    ) {
+      if (map.getLayer(id)) {
+        let color = isDark ? "#162628" : "#f2ece1";
+        if (!isDark) {
+          if (id.startsWith("park_") || id.includes("green") || id.includes("wood")) {
+            color = "#e1e9e2";
+          } else if (
+            id.includes("urban") ||
+            id.includes("residential") ||
+            id.includes("commercial")
+          ) {
+            color = "#eae2d4";
+          }
+        } else {
+          if (id.includes("secondary") || id.includes("landuse")) {
+            color = "#1b2e31";
+          }
+        }
+        map.setPaintProperty(id, "fill-color", color);
+      }
+      return;
+    }
+
+    if (id === "building" || id === "building-top") {
+      if (map.getLayer(id)) {
+        map.setPaintProperty(id, "fill-color", isDark ? "#162628" : "#eae2d4");
+        if (layer.paint && "fill-outline-color" in layer.paint) {
+          map.setPaintProperty(id, "fill-outline-color", isDark ? "#243b3f" : "#d4cbb9");
+        }
+      }
+      return;
+    }
+
+    if (
+      id.startsWith("road_") ||
+      id.startsWith("tunnel_") ||
+      id.startsWith("bridge_") ||
+      id.startsWith("aeroway") ||
+      id.startsWith("boundary_")
+    ) {
+      if (map.getLayer(id)) {
+        const roadColor = isDark ? "#243b3f" : "#d4cbb9";
+        if (type === "line") {
+          map.setPaintProperty(id, "line-color", roadColor);
+          map.setPaintProperty(id, "line-opacity", 0.45);
+        }
+      }
+      return;
+    }
+
+    if (type === "symbol") {
+      if (map.getLayer(id)) {
+        const textColor = isDark ? "#9ab0b3" : "#23383b";
+        const haloColor = isDark ? "#0d1a1d" : "#f2ece1";
+        map.setPaintProperty(id, "text-color", textColor);
+        map.setPaintProperty(id, "text-halo-color", haloColor);
+        map.setPaintProperty(id, "text-halo-width", 1.8);
+
+        // Exclude India and Bangladesh from country symbol layers without duplicate stacking
+        if (
+          id.startsWith("place_country") ||
+          id.includes("country_label") ||
+          id.includes("country")
+        ) {
+          const currentFilter = map.getFilter(id);
+          const filterStr = JSON.stringify(currentFilter || "");
+          if (!filterStr.includes('"india"')) {
+            const exclusionExpr = [
+              "!",
+              [
+                "in",
+                ["downcase", ["coalesce", ["get", "name_en"], ["get", "name"], ""]],
+                ["literal", ["india", "bangladesh"]],
+              ],
+            ];
+            const newFilter = currentFilter
+              ? ["all", currentFilter, exclusionExpr]
+              : exclusionExpr;
+            map.setFilter(id, newFilter);
+          }
+        }
+      }
+      return;
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Initial MapLibre Static Style Sanitizer
 // ---------------------------------------------------------------------------
 function buildThemedMapStyle(rawStyle: any, theme: ThemeMode) {
   if (!rawStyle || !Array.isArray(rawStyle.layers)) return rawStyle;
-  const pal = MAP_PALETTES[theme];
-  const majorLabelIds = new Set([
-    "place_country_1",
-    "place_capital_dot_z7",
-    "place_city_r5",
-    "place_city_r6",
-  ]);
+  const isDark = theme === "dark";
 
   const layers = rawStyle.layers.map((layer: any) => {
     const id: string = layer.id || "";
+    const type: string = layer.type || "";
     const paint = { ...(layer.paint || {}) };
 
-    // Hide international boundary layers that misrepresent Indian sovereignty
     if (
       id === "boundary_country_inner" ||
       id === "boundary_country_outline" ||
@@ -193,36 +329,52 @@ function buildThemedMapStyle(rawStyle: any, theme: ThemeMode) {
       };
     }
 
-    if (layer.type === "background") {
-      paint["background-color"] = pal.bg2;
-      paint["background-opacity"] = 0.92;
+    if (type === "background") {
+      paint["background-color"] = isDark ? "#0d1a1d" : "#cfe0df";
       return { ...layer, paint };
     }
 
     if (id === "water" || id === "water_shadow") {
-      paint["fill-color"] = pal.depth;
-      paint["fill-opacity"] = id === "water_shadow" ? 0.5 : 0.94;
+      paint["fill-color"] = isDark ? "#0d1a1d" : "#cfe0df";
+      paint["fill-opacity"] = 1.0;
       return { ...layer, paint };
     }
 
     if (id === "waterway") {
-      paint["line-color"] = pal.depth;
+      paint["line-color"] = isDark ? "#0d1a1d" : "#b9d2d1";
       return { ...layer, paint };
     }
 
     if (
       id === "landcover" ||
       id.startsWith("park_") ||
-      id.startsWith("landuse")
+      id.startsWith("landuse") ||
+      id === "land"
     ) {
-      paint["fill-color"] = pal.landSubtle;
+      let color = isDark ? "#162628" : "#f2ece1";
+      if (!isDark) {
+        if (id.startsWith("park_") || id.includes("green") || id.includes("wood")) {
+          color = "#e1e9e2";
+        } else if (
+          id.includes("urban") ||
+          id.includes("residential") ||
+          id.includes("commercial")
+        ) {
+          color = "#eae2d4";
+        }
+      } else {
+        if (id.includes("secondary") || id.includes("landuse")) {
+          color = "#1b2e31";
+        }
+      }
+      paint["fill-color"] = color;
       return { ...layer, paint };
     }
 
     if (id === "building" || id === "building-top") {
-      paint["fill-color"] = pal.landSubtle;
+      paint["fill-color"] = isDark ? "#162628" : "#eae2d4";
       if ("fill-outline-color" in paint) {
-        paint["fill-outline-color"] = pal.line;
+        paint["fill-outline-color"] = isDark ? "#243b3f" : "#d4cbb9";
       }
       return { ...layer, paint };
     }
@@ -231,28 +383,37 @@ function buildThemedMapStyle(rawStyle: any, theme: ThemeMode) {
       id.startsWith("road_") ||
       id.startsWith("tunnel_") ||
       id.startsWith("bridge_") ||
-      id.startsWith("aeroway")
+      id.startsWith("aeroway") ||
+      id.startsWith("boundary_")
     ) {
-      if ("line-color" in paint) {
-        paint["line-color"] =
-          id.includes("mot") || id.includes("trunk") || id.includes("pri")
-            ? pal.line
-            : pal.road;
+      if (type === "line") {
+        paint["line-color"] = isDark ? "#243b3f" : "#d4cbb9";
+        paint["line-opacity"] = 0.45;
       }
       return { ...layer, paint };
     }
 
-    if (layer.type === "symbol") {
-      if ("text-color" in paint) {
-        paint["text-color"] = majorLabelIds.has(id) ? pal.tx : pal.mut;
+    if (type === "symbol") {
+      paint["text-color"] = isDark ? "#9ab0b3" : "#23383b";
+      paint["text-halo-color"] = isDark ? "#0d1a1d" : "#f2ece1";
+      paint["text-halo-width"] = 1.8;
+      let filter = layer.filter;
+      if (
+        id.startsWith("place_country") ||
+        id.includes("country_label") ||
+        id.includes("country")
+      ) {
+        const exclusionExpr = [
+          "!",
+          [
+            "in",
+            ["downcase", ["coalesce", ["get", "name_en"], ["get", "name"], ""]],
+            ["literal", ["india", "bangladesh"]],
+          ],
+        ];
+        filter = filter ? ["all", filter, exclusionExpr] : exclusionExpr;
       }
-      if ("text-halo-color" in paint) {
-        paint["text-halo-color"] = pal.bg;
-      }
-      if ("icon-color" in paint) {
-        paint["icon-color"] = pal.mut;
-      }
-      return { ...layer, paint };
+      return { ...layer, paint, filter };
     }
 
     return layer;
@@ -489,6 +650,31 @@ export default function App() {
     return buildThemedMapStyle(rawMapStyle, theme);
   }, [rawMapStyle, theme]);
 
+  const mapRef = useRef<any>(null);
+
+  const handleMapLoad = useCallback(
+    (e: any) => {
+      applyBasemapTheme(e.target, theme);
+    },
+    [theme]
+  );
+
+  const handleMapStyleData = useCallback(
+    (e: any) => {
+      applyBasemapTheme(e.target, theme);
+    },
+    [theme]
+  );
+
+  useEffect(() => {
+    if (mapRef.current) {
+      const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current;
+      if (map && map.isStyleLoaded && map.isStyleLoaded()) {
+        applyBasemapTheme(map, theme);
+      }
+    }
+  }, [theme]);
+
   // ---- Fetch Official Survey of India Boundary ----------------------------
   useEffect(() => {
     fetch("/india_boundary.geojson")
@@ -606,7 +792,7 @@ export default function App() {
 
     // 0) Official Survey of India Sovereign Boundary Layers
     if (indiaBoundary) {
-      // Subtle soft drop-shadow glow in var(--cool)
+      // Subtle outer edge
       result.push(
         new GeoJsonLayer({
           id: "official-india-boundary-glow",
@@ -614,15 +800,15 @@ export default function App() {
           pickable: false,
           stroked: true,
           filled: false,
-          lineWidthMinPixels: 4.5,
-          getLineWidth: 5,
-          getLineColor: [...pal.coolRgb, theme === "dark" ? 48 : 38],
+          lineWidthMinPixels: theme === "dark" ? 3.5 : 3.0,
+          getLineWidth: theme === "dark" ? 3.5 : 3.0,
+          getLineColor: theme === "dark" ? [43, 110, 114, 70] : [43, 110, 114, 40],
           updateTriggers: {
             getLineColor: [theme],
           },
         })
       );
-      // Refined 1.8px var(--cool) sovereign boundary line + subtle territory tint
+      // Crisp primary stroke in muted sage-teal (dark) / deep slate-teal (light) + subtle interior tint
       result.push(
         new GeoJsonLayer({
           id: "official-india-boundary-core",
@@ -630,10 +816,10 @@ export default function App() {
           pickable: false,
           stroked: true,
           filled: true,
-          lineWidthMinPixels: 1.8,
-          getLineWidth: 1.8,
-          getLineColor: [...pal.coolRgb, theme === "dark" ? 235 : 225],
-          getFillColor: [...pal.coolRgb, theme === "dark" ? 14 : 10],
+          lineWidthMinPixels: theme === "dark" ? 1.6 : 1.7,
+          getLineWidth: theme === "dark" ? 1.6 : 1.7,
+          getLineColor: theme === "dark" ? [79, 163, 165, 220] : [43, 110, 114, 215],
+          getFillColor: theme === "dark" ? [43, 110, 114, 34] : [78, 135, 128, 20],
           updateTriggers: {
             getLineColor: [theme],
             getFillColor: [theme],
@@ -658,7 +844,7 @@ export default function App() {
             const base = priorityToColor(score, theme);
             if (selectedEventId) {
               if (f.properties?.id === selectedEventId) {
-                return theme === "dark" ? [56, 189, 248, 240] : [2, 132, 199, 240];
+                return theme === "dark" ? [253, 224, 140, 240] : [184, 111, 28, 240];
               }
               return [base[0], base[1], base[2], 95];
             }
@@ -700,7 +886,7 @@ export default function App() {
           getFillColor: (d: any) => {
             if (selectedEventId) {
               if (d.id === selectedEventId) {
-                return theme === "dark" ? [56, 189, 248, 255] : [2, 132, 199, 255];
+                return theme === "dark" ? [253, 224, 140, 255] : [184, 111, 28, 255];
               }
               const base = priorityToColor(d.priorityScore, theme);
               return [base[0], base[1], base[2], 95];
@@ -716,7 +902,7 @@ export default function App() {
       );
     }
 
-    // 3) Dedicated Selection Target Layers
+    // 3) Dedicated Selection Target Layers (Warm Luminous Gold)
     if (selectedEvent) {
       const prefersReduced =
         typeof window !== "undefined" &&
@@ -735,9 +921,10 @@ export default function App() {
           getLineWidth: 2.5,
           radiusUnits: "pixels",
           getRadius: 22,
-          getLineColor: [248, 250, 252, 240],
+          getLineColor: theme === "dark" ? [253, 224, 140, 240] : [184, 111, 28, 240],
           updateTriggers: {
             getPosition: [selectedEvent.id],
+            getLineColor: [theme],
           },
         })
       );
@@ -745,6 +932,7 @@ export default function App() {
       // Pulsing Radar Halo
       const pulseRadius = prefersReduced ? 28 : 16 + (44 - 16) * pulseProgress;
       const pulseAlpha = prefersReduced ? 160 : Math.round(220 * (1 - pulseProgress));
+      const goldRgb = theme === "dark" ? [253, 224, 140] : [184, 111, 28];
       result.push(
         new ScatterplotLayer({
           id: "selected-event-pulse",
@@ -757,11 +945,11 @@ export default function App() {
           getLineWidth: 2,
           radiusUnits: "pixels",
           getRadius: pulseRadius,
-          getLineColor: [56, 189, 248, pulseAlpha],
+          getLineColor: [goldRgb[0], goldRgb[1], goldRgb[2], pulseAlpha] as [number, number, number, number],
           updateTriggers: {
             getPosition: [selectedEvent.id],
             getRadius: [pulseRadius],
-            getLineColor: [pulseAlpha],
+            getLineColor: [theme, pulseAlpha],
           },
         })
       );
@@ -786,11 +974,63 @@ export default function App() {
           getBackgroundColor: [15, 23, 42, 235],
           backgroundBorderRadius: 6,
           backgroundPadding: [8, 4, 8, 4],
-          getBorderColor: [56, 189, 248, 255],
+          getBorderColor: theme === "dark" ? [253, 224, 140, 255] : [184, 111, 28, 255],
           getBorderWidth: 1.5,
           updateTriggers: {
             getPosition: [selectedEvent.id],
             getText: [selectedEvent.id],
+            getBorderColor: [theme],
+          },
+        })
+      );
+    }
+
+    // 4) Sovereign Country Labels (Rendered top-most after boundary & ColumnLayer)
+    const currentZoom = viewState.zoom || 4.5;
+    const zoomFade = currentZoom <= 6.5 ? 1 : Math.max(0, 1 - (currentZoom - 6.5) / 1.5);
+
+    if (zoomFade > 0.02) {
+      const isDark = theme === "dark";
+      const textColor: [number, number, number, number] = isDark
+        ? [232, 238, 237, Math.round(230 * zoomFade)]
+        : [24, 42, 45, Math.round(235 * zoomFade)];
+      const outlineColor: [number, number, number, number] = isDark
+        ? [13, 26, 29, Math.round(240 * zoomFade)]
+        : [242, 236, 225, Math.round(245 * zoomFade)];
+
+      result.push(
+        new TextLayer({
+          id: "sovereign-country-labels",
+          data: [
+            {
+              text: "I N D I A",
+              coordinates: [78.9, 21.2],
+              size: 13,
+              color: textColor,
+              outlineColor: outlineColor,
+            },
+            {
+              text: "BANGLADESH",
+              coordinates: [90.45, 23.75],
+              size: 10.5,
+              color: textColor,
+              outlineColor: outlineColor,
+            },
+          ],
+          pickable: false,
+          getPosition: (d: any) => d.coordinates,
+          getText: (d: any) => d.text,
+          getSize: (d: any) => d.size,
+          getColor: (d: any) => d.color,
+          getTextAnchor: "middle",
+          getAlignmentBaseline: "center",
+          fontFamily: '"Public Sans", system-ui, sans-serif',
+          fontWeight: 700,
+          fontSettings: { sdf: true },
+          outlineWidth: 4,
+          outlineColor: outlineColor,
+          updateTriggers: {
+            getColor: [theme, zoomFade],
           },
         })
       );
@@ -806,6 +1046,7 @@ export default function App() {
     selectedEventId,
     selectedEvent,
     pulseProgress,
+    viewState.zoom,
   ]);
 
   // ---- Tooltip ------------------------------------------------------------
@@ -868,23 +1109,30 @@ export default function App() {
       <header className="te-nav te-enter-nav">
         <div className="te-nav-inner">
           <div className="te-brand">
-            <span className="te-brand-mark" aria-hidden="true">
+            <a href="/" className="te-logo-link" title="ThermalEye Home">
               <svg
-                className="w-4 h-4"
-                viewBox="0 0 24 24"
+                viewBox="0 0 32 32"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                strokeWidth="1.8"
+                className="w-[26px] h-[26px] flex-none"
               >
-                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                <circle cx="16" cy="16" r="13" />
+                <circle cx="16" cy="16" r="6" stroke="var(--hot)" />
+                <circle cx="16" cy="16" r="1.8" fill="var(--hot)" stroke="none" />
               </svg>
-            </span>
-            <div className="te-brand-text">
-              <span className="te-logo">ThermalEye</span>
-              <span className="te-subtitle">Geospatial Intelligence Platform</span>
-            </div>
+              <span className="te-logo-text">ThermalEye</span>
+            </a>
+
+            <ul className="te-nav-links" id="dashboard-nav-links">
+              <li><a href="/#overview">Overview</a></li>
+              <li><a href="/#states">States</a></li>
+              <li><a href="/#trends">Trends</a></li>
+              <li><a href="/#events">Events</a></li>
+              <li><a href="/#method">Method</a></li>
+              <li><a href="/#models">ML Validation</a></li>
+              <li><a href="/#sources">Sources</a></li>
+            </ul>
           </div>
 
           <div className="te-nav-actions">
@@ -902,37 +1150,18 @@ export default function App() {
               </div>
             )}
 
+            {/* 1. Compact status pill: active events count */}
             <div className="te-chip" aria-label={`${activeCount} active events`}>
               <span className="te-chip-count">{activeCount}</span>
               <span className="te-chip-label">active events</span>
             </div>
 
-            <a
-              href="/"
-              className="btn ghost"
-              title="Return to Landing Page"
-              aria-label="Home"
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-              <span className="te-btn-label">Home</span>
-            </a>
-
+            {/* 2. Secondary ghost button: Refresh */}
             <button
               type="button"
               onClick={fetchActiveEvents}
               disabled={loading}
-              className="btn"
+              className="btn ghost"
               title="Refresh active thermal events"
               aria-label="Refresh"
             >
@@ -953,10 +1182,11 @@ export default function App() {
               <span className="te-btn-label">Refresh</span>
             </button>
 
+            {/* 3. Primary CTA: Analyze Sample */}
             <button
               type="button"
               onClick={() => setIsAnalyzeOpen(true)}
-              className="btn"
+              className="btn btn-primary"
               title="Upload and analyze satellite image sample"
               aria-label="Analyze Sample"
             >
@@ -976,6 +1206,7 @@ export default function App() {
               <span className="te-btn-label">Analyze Sample</span>
             </button>
 
+            {/* 4. Pill-outlined theme toggle */}
             <button
               type="button"
               onClick={toggleTheme}
@@ -1072,7 +1303,13 @@ export default function App() {
           }}
           style={{ position: "absolute", inset: "0px" }}
         >
-          <Map mapStyle={customMapStyle} attributionControl={false} />
+          <Map
+            ref={mapRef}
+            mapStyle={customMapStyle}
+            attributionControl={false}
+            onLoad={handleMapLoad}
+            onStyleData={handleMapStyleData}
+          />
         </DeckGL>
       </div>
 
@@ -1100,7 +1337,7 @@ export default function App() {
           className="te-card te-boundary-card te-enter-panel-2"
           aria-label="Survey of India Official Boundary"
         >
-          <span className="te-dot te-dot-cool" aria-hidden="true" />
+          <span className="te-dot te-dot-soi" aria-hidden="true" />
           <div>
             <div className="te-boundary-title">SURVEY OF INDIA OFFICIAL BOUNDARY</div>
             <div className="te-boundary-sub">

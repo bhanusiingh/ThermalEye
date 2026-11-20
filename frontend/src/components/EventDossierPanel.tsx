@@ -441,25 +441,13 @@ export default function EventDossierPanel({
 
         <div className="flex items-center gap-2 shrink-0">
           <div
-            className="te-pill hidden sm:inline-flex"
+            className="te-pill te-pill-selected hidden sm:inline-flex"
             style={{
-              background: "color-mix(in srgb, var(--cool) 12%, var(--bg2))",
-              borderColor: "color-mix(in srgb, var(--cool) 35%, var(--line))",
-              color: "var(--cool)",
               fontSize: "11px",
               padding: "2px 8px",
             }}
           >
-            <span
-              className="te-dot"
-              style={{
-                width: "7px",
-                height: "7px",
-                background: "#38bdf8",
-                boxShadow: "0 0 8px #38bdf8",
-                animation: "tePulse 1.5s ease-in-out infinite",
-              }}
-            />
+            <span className="te-dot te-dot-selected" />
             <span>Selected on map</span>
           </div>
 
