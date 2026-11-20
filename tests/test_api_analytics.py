@@ -535,8 +535,12 @@ class TestAnalyticsEndpoints(unittest.TestCase):
             {
                 "id": str(id1),
                 "state": "Punjab",
+                "lat": 30.9,
+                "lon": 75.85,
                 "peak_frp": 92.3,
                 "evidence": "available",
+                "imagery_rgb_path": "static/imagery/1_rgb.png",
+                "imagery_swir_path": None,
             },
         )
         self.assertEqual(
@@ -544,8 +548,12 @@ class TestAnalyticsEndpoints(unittest.TestCase):
             {
                 "id": str(id2),
                 "state": "Odisha",
+                "lat": 20.29,
+                "lon": 85.82,
                 "peak_frp": 41.0,
                 "evidence": "partial",
+                "imagery_rgb_path": None,
+                "imagery_swir_path": None,
             },
         )
         self.assertEqual(
@@ -553,8 +561,12 @@ class TestAnalyticsEndpoints(unittest.TestCase):
             {
                 "id": str(id3),
                 "state": "India",
+                "lat": 10.0,
+                "lon": 60.0,
                 "peak_frp": None,
                 "evidence": "unavailable",
+                "imagery_rgb_path": None,
+                "imagery_swir_path": None,
             },
         )
 

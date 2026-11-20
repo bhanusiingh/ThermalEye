@@ -1,0 +1,44 @@
+# ===========================================================================
+# ThermalEye — Docker Build Context Exclusion Rules (.dockerignore)
+# ===========================================================================
+
+# Version control & agent metadata
+.git/
+.gitignore
+.agents/
+.gemini/
+.claude/
+.cursor/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# Geospatial raw snapshots & transient upload files
+data/osm/
+*.osm.pbf
+static/uploads/*
+!static/uploads/.gitkeep
+
+# Node dependencies & frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+**/node_modules/
+
+# Test suites & test caches (not required inside production runtime)
+tests/
+.pytest_cache/
+
+# Python bytecode & compilation caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Local dumps, logs, and scratch files
+*.dump
+*.tmp
+*.log
+*.bak

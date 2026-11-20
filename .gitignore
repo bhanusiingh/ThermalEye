@@ -139,6 +139,7 @@ desktop.ini
 .cursor/
 
 *.osm.pbf
-static/uploads/
+static/uploads/*
+!static/uploads/.gitkeep
 
 models/*.pt

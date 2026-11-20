@@ -1,0 +1,10 @@
+# ===========================================================================
+# ThermalEye Frontend — Docker Build Context Exclusion Rules (.dockerignore)
+# ===========================================================================
+
+node_modules/
+dist/
+.vite/
+.git/
+.env*
+*.log
